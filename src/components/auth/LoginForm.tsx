@@ -9,8 +9,8 @@ import { useAuthStore } from "../../store/authStore";
 export function LoginForm() {
   const navigate = useNavigate();
   const { login, isLoading, error } = useAuthStore();
-  const [username, setUsername] = useState("demo");
-  const [password, setPassword] = useState("nebulaim");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,7 +28,7 @@ export function LoginForm() {
         label="Username"
         value={username}
         onChange={(event) => setUsername(event.target.value)}
-        placeholder="demo"
+        placeholder="Username"
         icon={<UserRound className="h-4 w-4" />}
         autoComplete="username"
       />
@@ -37,7 +37,7 @@ export function LoginForm() {
         type="password"
         value={password}
         onChange={(event) => setPassword(event.target.value)}
-        placeholder="nebulaim"
+        placeholder="Password"
         icon={<LockKeyhole className="h-4 w-4" />}
         autoComplete="current-password"
       />
