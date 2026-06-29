@@ -21,10 +21,12 @@ export function ServiceHealthCard({ service }: ServiceHealthCardProps) {
       <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
         <div
           className="h-full rounded-full bg-primary-gradient"
-          style={{ width: `${Math.max(18, 100 - service.latency)}%` }}
+          style={{ width: service.latency === undefined ? "100%" : `${Math.max(18, 100 - service.latency)}%` }}
         />
       </div>
-      <p className="mt-2 text-xs text-slate-400">{service.latency}ms service latency</p>
+      <p className="mt-2 text-xs text-slate-400">
+        {service.latency === undefined ? "Live dependency status from AdminService" : `${service.latency}ms service latency`}
+      </p>
     </Card>
   );
 }

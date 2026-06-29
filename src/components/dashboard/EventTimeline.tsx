@@ -8,17 +8,17 @@ type EventTimelineProps = {
 };
 
 const toneByType = {
-  "user login": "cyan",
-  "message sent": "emerald",
-  "push delivered": "violet",
-  "kafka retry": "amber",
-  "offline saved": "slate"
+  "admin health": "cyan",
+  "system stats": "emerald",
+  "outbox status": "violet",
+  "kafka lag": "amber",
+  "bridge health": "slate"
 } as const;
 
 export function EventTimeline({ events }: EventTimelineProps) {
   return (
     <Card className="p-4">
-      <h2 className="text-base font-semibold text-nebula-text">Recent Events</h2>
+      <h2 className="text-base font-semibold text-nebula-text">Latest Checks</h2>
       <div className="mt-4 space-y-4">
         {events.map((event) => (
           <div key={event.id} className="relative border-l border-nebula-border pl-4">

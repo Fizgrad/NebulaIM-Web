@@ -38,6 +38,35 @@ type GetBridgeUserResponse = {
   user: BridgeUserInfo;
 };
 
+type RelationUserInfo = BridgeUserInfo;
+
+type CommonBridgeResponse = {
+  code: number;
+  message: string;
+  requestId?: string;
+};
+
+type ListBridgeFriendsResponse = {
+  ok: boolean;
+  friends: RelationUserInfo[];
+};
+
+type CommonRelationResponse = {
+  ok: boolean;
+  response: CommonBridgeResponse;
+};
+
+type CreateBridgeGroupResponse = {
+  ok: boolean;
+  groupId: string;
+  response: CommonBridgeResponse;
+};
+
+type ListBridgeGroupMembersResponse = {
+  ok: boolean;
+  members: RelationUserInfo[];
+};
+
 export async function getBridgeHealth(baseUrl: string) {
   const response = await requestWithRetry(() => httpClient.get<BridgeHealth>(`${baseUrl.replace(/\/$/, "")}/health`), { retries: 1 });
   return response.data;
@@ -99,6 +128,100 @@ export async function getBridgeUserInfo(baseUrl: string, userId: string): Promis
     status: "online",
     registeredAt: Number(user.createdAt ?? Date.now()),
     gateway: "UserService",
+    connectionId: `user-${user.userId}`
+  };
+}
+
+export async function listBridgeFriends(baseUrl: string, userId: string): Promise<User[]> {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () => httpClient.get<ListBridgeFriendsResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/friends`, { params: { userId } }),
+      { retries: 1 }
+    )
+  );
+  return response.friends.map(toUser);
+}
+
+export async function addBridgeFriend(baseUrl: string, userId: string, friendId: string): Promise<void> {
+  await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.post<CommonRelationResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/friends`, {
+          userId,
+          friendId
+        }),
+      { retries: 1 }
+    )
+  );
+}
+
+export async function deleteBridgeFriend(baseUrl: string, userId: string, friendId: string): Promise<void> {
+  await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.delete<CommonRelationResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/friends/${friendId}`, {
+          params: { userId }
+        }),
+      { retries: 1 }
+    )
+  );
+}
+
+export async function createBridgeGroup(baseUrl: string, ownerId: string, name: string) {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.post<CreateBridgeGroupResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups`, {
+          ownerId,
+          name
+        }),
+      { retries: 1 }
+    )
+  );
+  return {
+    groupId: response.groupId,
+    response: response.response
+  };
+}
+
+export async function joinBridgeGroup(baseUrl: string, userId: string, groupId: string): Promise<void> {
+  await bridgeRequest(() =>
+    requestWithRetry(
+      () => httpClient.post<CommonRelationResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups/${groupId}/join`, { userId }),
+      { retries: 1 }
+    )
+  );
+}
+
+export async function leaveBridgeGroup(baseUrl: string, userId: string, groupId: string): Promise<void> {
+  await bridgeRequest(() =>
+    requestWithRetry(
+      () => httpClient.post<CommonRelationResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups/${groupId}/leave`, { userId }),
+      { retries: 1 }
+    )
+  );
+}
+
+export async function listBridgeGroupMembers(baseUrl: string, groupId: string): Promise<User[]> {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () => httpClient.get<ListBridgeGroupMembersResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups/${groupId}/members`),
+      { retries: 1 }
+    )
+  );
+  return response.members.map(toUser);
+}
+
+function toUser(user: RelationUserInfo): User {
+  return {
+    id: user.userId,
+    username: user.username,
+    nickname: user.nickname || user.username || `User ${user.userId}`,
+    avatar: user.avatar || undefined,
+    avatarColor: "from-cyan-500 to-blue-500",
+    status: "online",
+    registeredAt: Number(user.createdAt ?? Date.now()),
+    gateway: "RelationService",
     connectionId: `user-${user.userId}`
   };
 }

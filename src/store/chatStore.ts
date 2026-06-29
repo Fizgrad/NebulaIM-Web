@@ -47,6 +47,26 @@ function sortConversations(conversations: Conversation[]) {
   return [...conversations].sort((a, b) => b.lastMessageAt - a.lastMessageAt);
 }
 
+function exampleConversations() {
+  return sortConversations(mockConversations.map((conversation) => ({ ...conversation })));
+}
+
+function exampleMessages() {
+  return groupMessages(mockMessages.map((message) => ({ ...message })));
+}
+
+function initialConversations() {
+  return useSettingsStore.getState().connectionMode === "mock" ? exampleConversations() : [];
+}
+
+function initialActiveConversationId() {
+  return useSettingsStore.getState().connectionMode === "mock" ? "c-alice" : null;
+}
+
+function initialMessages() {
+  return useSettingsStore.getState().connectionMode === "mock" ? exampleMessages() : {};
+}
+
 function isNumericId(value?: string) {
   return Boolean(value && /^\d+$/.test(value));
 }
@@ -110,9 +130,9 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
-  conversations: sortConversations(mockConversations.map((conversation) => ({ ...conversation }))),
-  activeConversationId: "c-alice",
-  messagesByConversationId: groupMessages(mockMessages.map((message) => ({ ...message }))),
+  conversations: initialConversations(),
+  activeConversationId: initialActiveConversationId(),
+  messagesByConversationId: initialMessages(),
   gatewayStatus: {
     state: "disconnected",
     heartbeatOk: false,
@@ -288,7 +308,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     const conversation: Conversation = {
-      id: createId("c"),
+      id: isNumericId(group.id) ? `group-${group.id}` : createId("c"),
       type: "group",
       title: group.name,
       lastMessage: "Group conversation ready",
@@ -312,8 +332,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   clearLocalChat: () =>
     set({
-      conversations: sortConversations(mockConversations.map((conversation) => ({ ...conversation }))),
-      activeConversationId: "c-alice",
-      messagesByConversationId: groupMessages(mockMessages.map((message) => ({ ...message })))
+      conversations: initialConversations(),
+      activeConversationId: initialActiveConversationId(),
+      messagesByConversationId: initialMessages()
     })
 }));

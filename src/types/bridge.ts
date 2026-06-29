@@ -35,5 +35,7 @@ export type BridgeInfo = {
   name: string;
   gateway: string;
   user?: string;
+  relation?: string;
+  admin?: string;
   websocket: string;
 };

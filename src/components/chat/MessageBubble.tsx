@@ -1,6 +1,5 @@
 import { AlertCircle, Check, CheckCheck, Clock } from "lucide-react";
 import type { Message, MessageStatus } from "../../types/message";
-import { mockUsers } from "../../mocks/users";
 import { Avatar } from "../common/Avatar";
 import { Button } from "../common/Button";
 import { formatShortTime } from "../../utils/time";
@@ -20,11 +19,11 @@ const statusIcon: Record<MessageStatus, JSX.Element> = {
 };
 
 export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
-  const sender = mockUsers.find((user) => user.id === message.fromUserId);
+  const senderName = `User ${message.fromUserId}`;
 
   return (
     <div className={cn("flex gap-3", message.isMine ? "justify-end" : "justify-start")}>
-      {!message.isMine ? <Avatar name={sender?.nickname ?? "User"} color={sender?.avatarColor} size="sm" /> : null}
+      {!message.isMine ? <Avatar name={senderName} size="sm" /> : null}
       <div className={cn("max-w-[78%] md:max-w-[62%]", message.isMine ? "items-end" : "items-start")}>
         <div
           className={cn(

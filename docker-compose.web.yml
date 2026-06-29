@@ -20,6 +20,10 @@ services:
       - BRIDGE_PORT=8080
       - GATEWAY_TCP_HOST=host.docker.internal
       - GATEWAY_TCP_PORT=9000
+      - USER_SERVICE_HOST=host.docker.internal
+      - USER_SERVICE_PORT=50051
+      - RELATION_SERVICE_HOST=host.docker.internal
+      - RELATION_SERVICE_PORT=50053
       - ADMIN_SERVICE_HOST=host.docker.internal
       - ADMIN_SERVICE_PORT=50057
       - CORS_ORIGIN=http://localhost:5173

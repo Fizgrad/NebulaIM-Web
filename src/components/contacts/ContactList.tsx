@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
 import type { User } from "../../types/user";
 import { ContactCard } from "./ContactCard";
@@ -11,9 +11,13 @@ type ContactListProps = {
 };
 
 export function ContactList({ onMessage }: ContactListProps) {
-  const { contacts, addFriend, deleteFriend, isLoading } = useContactStore();
+  const { contacts, addFriend, deleteFriend, isLoading, error, loadFriends } = useContactStore();
   const [query, setQuery] = useState("");
   const [newFriend, setNewFriend] = useState("");
+
+  useEffect(() => {
+    void loadFriends();
+  }, [loadFriends]);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -26,8 +30,12 @@ export function ContactList({ onMessage }: ContactListProps) {
   async function handleAddFriend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!newFriend.trim()) return;
-    await addFriend(newFriend.trim());
-    setNewFriend("");
+    try {
+      await addFriend(newFriend.trim());
+      setNewFriend("");
+    } catch {
+      // Store owns the displayed error state.
+    }
   }
 
   return (
@@ -43,7 +51,7 @@ export function ContactList({ onMessage }: ContactListProps) {
           <Input
             value={newFriend}
             onChange={(event) => setNewFriend(event.target.value)}
-            placeholder="username or user id"
+            placeholder="numeric user id"
             className="h-10"
           />
           <Button type="submit" variant="primary" disabled={isLoading}>
@@ -53,11 +61,18 @@ export function ContactList({ onMessage }: ContactListProps) {
         </form>
       </div>
 
+      {error ? <div className="rounded-lg border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm text-red-100">{error}</div> : null}
+
       <div className="grid gap-3 xl:grid-cols-2">
         {filtered.map((user) => (
           <ContactCard key={user.id} user={user} onMessage={onMessage} onDelete={deleteFriend} />
         ))}
       </div>
+      {!isLoading && filtered.length === 0 ? (
+        <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-6 text-sm text-nebula-muted">
+          No real friends loaded. Add a numeric backend user_id to create a RelationService friendship.
+        </div>
+      ) : null}
     </div>
   );
 }

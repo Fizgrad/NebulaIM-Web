@@ -12,7 +12,7 @@ type GroupListProps = {
 };
 
 export function GroupList({ onMessage, onMembers }: GroupListProps) {
-  const { groups, createGroup, joinGroup, leaveGroup, isLoading } = useGroupStore();
+  const { groups, createGroup, joinGroup, leaveGroup, isLoading, error } = useGroupStore();
   const [query, setQuery] = useState("");
   const [groupName, setGroupName] = useState("");
   const [joinId, setJoinId] = useState("");
@@ -26,15 +26,23 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!groupName.trim()) return;
-    await createGroup(groupName.trim());
-    setGroupName("");
+    try {
+      await createGroup(groupName.trim());
+      setGroupName("");
+    } catch {
+      // Store owns the displayed error state.
+    }
   }
 
   async function handleJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!joinId.trim()) return;
-    await joinGroup(joinId.trim());
-    setJoinId("");
+    try {
+      await joinGroup(joinId.trim());
+      setJoinId("");
+    } catch {
+      // Store owns the displayed error state.
+    }
   }
 
   return (
@@ -61,6 +69,8 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
         </form>
       </div>
 
+      {error ? <div className="rounded-lg border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm text-red-100">{error}</div> : null}
+
       <div className="grid gap-3 xl:grid-cols-2">
         {filtered.map((group) => (
           <GroupCard
@@ -73,6 +83,11 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
           />
         ))}
       </div>
+      {!isLoading && filtered.length === 0 ? (
+        <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-6 text-sm text-nebula-muted">
+          No real groups loaded. Create a group or join with a numeric backend group_id.
+        </div>
+      ) : null}
     </div>
   );
 }

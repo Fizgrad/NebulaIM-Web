@@ -7,6 +7,7 @@ Browsers cannot open native TCP connections to the C++ Gateway on port `9000`, s
 - WebSocket JSON protocol at `/ws`
 - HTTP health endpoints at `/health` and `/info`
 - HTTP UserService auth proxy endpoints at `/api/auth/*`
+- HTTP RelationService proxy endpoints at `/api/relation/*`
 - HTTP AdminService proxy endpoints at `/api/admin/*`
 - Native TCP binary Packet protocol to NebulaIM Gateway
 
@@ -32,6 +33,12 @@ Browser Register / Token Refresh
 NebulaIM Web Bridge
   -> gRPC protobuf
 UserService
+
+Browser Contacts / Groups
+  -> HTTP JSON /api/relation/*
+NebulaIM Web Bridge
+  -> gRPC protobuf
+RelationService
 ```
 
 One browser WebSocket session owns one TCP Gateway connection. Do not share a TCP connection across browser users because Gateway session identity is connection-scoped.
@@ -45,6 +52,8 @@ GATEWAY_TCP_HOST=127.0.0.1
 GATEWAY_TCP_PORT=9000
 USER_SERVICE_HOST=127.0.0.1
 USER_SERVICE_PORT=50051
+RELATION_SERVICE_HOST=127.0.0.1
+RELATION_SERVICE_PORT=50053
 ADMIN_SERVICE_HOST=127.0.0.1
 ADMIN_SERVICE_PORT=50057
 CORS_ORIGIN=http://localhost:5173
@@ -112,6 +121,20 @@ Refresh request:
   "token": "current-token"
 }
 ```
+
+## Relation HTTP API
+
+The bridge exposes browser-safe RelationService endpoints:
+
+- `GET /api/relation/friends?userId=<id>`
+- `POST /api/relation/friends` with `{ "userId": "21", "friendId": "20" }`
+- `DELETE /api/relation/friends/:friendId?userId=<id>`
+- `POST /api/relation/groups` with `{ "ownerId": "21", "name": "Backend Infra" }`
+- `POST /api/relation/groups/:groupId/join` with `{ "userId": "21" }`
+- `POST /api/relation/groups/:groupId/leave` with `{ "userId": "21" }`
+- `GET /api/relation/groups/:groupId/members`
+
+The bridge forwards these calls to `nebula.proto.RelationService` on `RELATION_SERVICE_HOST:RELATION_SERVICE_PORT`. IDs must be numeric backend IDs. The default frontend does not load mock friends or mock groups; mock records are only used by `npm run dev:example`.
 
 ## Admin HTTP API
 
@@ -243,6 +266,17 @@ The bridge currently expects these fully qualified names:
 - `nebula.proto.GetKafkaLagInfoResponse`
 - `nebula.proto.RunCleanupRequest`
 - `nebula.proto.RunCleanupResponse`
+- `nebula.proto.RelationService`
+- `nebula.proto.AddFriendRequest`
+- `nebula.proto.DeleteFriendRequest`
+- `nebula.proto.ListFriendsRequest`
+- `nebula.proto.ListFriendsResponse`
+- `nebula.proto.CreateGroupRequest`
+- `nebula.proto.CreateGroupResponse`
+- `nebula.proto.JoinGroupRequest`
+- `nebula.proto.LeaveGroupRequest`
+- `nebula.proto.ListGroupMembersRequest`
+- `nebula.proto.ListGroupMembersResponse`
 
 These files must be synchronized with the real NebulaIM backend proto definitions before production use.
 

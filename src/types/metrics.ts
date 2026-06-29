@@ -12,7 +12,7 @@ export type ServiceHealthStatus = "healthy" | "degraded" | "down";
 export type ServiceHealth = {
   name: string;
   status: ServiceHealthStatus;
-  latency: number;
+  latency?: number;
   detail: string;
 };
 
@@ -24,11 +24,11 @@ export type MetricsPoint = {
 };
 
 export type DashboardEventType =
-  | "user login"
-  | "message sent"
-  | "push delivered"
-  | "kafka retry"
-  | "offline saved";
+  | "admin health"
+  | "system stats"
+  | "outbox status"
+  | "kafka lag"
+  | "bridge health";
 
 export type DashboardEvent = {
   id: string;

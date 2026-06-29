@@ -40,7 +40,7 @@ const defaults = {
   bridgeHttpUrl: import.meta.env.VITE_BRIDGE_HTTP_URL ?? defaultBridgeHttpUrl(),
   autoReconnect: true,
   heartbeatIntervalMs: 15000,
-  randomFailureEnabled: true
+  randomFailureEnabled: connectionModeDefault === "mock"
 };
 
 function defaultConnectionMode(): ConnectionMode {
@@ -78,10 +78,20 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "nebulaim-settings",
-      version: 4,
+      version: 5,
+      merge: (persistedState, currentState) => {
+        const state = persistedState as Partial<SettingsState> | undefined;
+        return {
+          ...currentState,
+          ...state,
+          connectionMode: defaults.connectionMode,
+          mockMode: defaults.mockMode,
+          randomFailureEnabled: state?.randomFailureEnabled ?? defaults.randomFailureEnabled
+        };
+      },
       migrate: (persistedState, version) => {
         const state = persistedState as Partial<SettingsState>;
-        if (version < 4) {
+        if (version < 5) {
           return {
             ...state,
             connectionMode: defaults.connectionMode,
