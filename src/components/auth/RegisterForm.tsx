@@ -22,6 +22,10 @@ export function RegisterForm() {
       setLocalError("Passwords do not match.");
       return;
     }
+    if (password.length < 6) {
+      setLocalError("Password must be at least 6 characters.");
+      return;
+    }
     try {
       await register(username, password, nickname);
       navigate("/login");

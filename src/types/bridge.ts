@@ -34,5 +34,6 @@ export type BridgeHealth = {
 export type BridgeInfo = {
   name: string;
   gateway: string;
+  user?: string;
   websocket: string;
 };

@@ -5,6 +5,7 @@ import cors from "cors";
 import express from "express";
 import type { BridgeConfig } from "../config.js";
 import { createAdminRouter } from "./adminRoutes.js";
+import { createAuthRouter } from "./authRoutes.js";
 
 export function createHttpServer(config: BridgeConfig): http.Server {
   const app = express();
@@ -22,11 +23,13 @@ export function createHttpServer(config: BridgeConfig): http.Server {
     res.json({
       name: "nebulaim-web-bridge",
       gateway: `${config.gatewayTcpHost}:${config.gatewayTcpPort}`,
+      user: `${config.userServiceHost}:${config.userServicePort}`,
       admin: `${config.adminServiceHost}:${config.adminServicePort}`,
       websocket: "/ws"
     });
   });
 
+  app.use("/api/auth", createAuthRouter());
   app.use("/api/admin", createAdminRouter());
 
   if (config.webStaticDir && fs.existsSync(path.join(config.webStaticDir, "index.html"))) {

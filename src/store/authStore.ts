@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { User } from "../types/user";
 import * as authApi from "../api/authApi";
-import { refreshBridgeToken } from "../api/bridgeApi";
+import { refreshBridgeToken, registerBridgeUser } from "../api/bridgeApi";
 import { getGatewayClient, resetGatewayClient } from "../services/gatewayClient";
 import { useSettingsStore } from "./settingsStore";
 import { normalizeExpireAt, isTokenExpiringSoon } from "../services/authToken";
@@ -85,7 +85,12 @@ export const useAuthStore = create<AuthState>()(
       register: async (username, password, nickname) => {
         set({ isLoading: true, error: null });
         try {
-          await authApi.register(username, password, nickname);
+          const settings = useSettingsStore.getState();
+          if (settings.connectionMode === "real") {
+            await registerBridgeUser(settings.bridgeHttpUrl, username, password, nickname);
+          } else {
+            await authApi.register(username, password, nickname);
+          }
           set({ isLoading: false, error: null });
         } catch (error) {
           set({

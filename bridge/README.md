@@ -6,6 +6,7 @@ Browsers cannot open native TCP connections to the C++ Gateway on port `9000`, s
 
 - WebSocket JSON protocol at `/ws`
 - HTTP health endpoints at `/health` and `/info`
+- HTTP UserService auth proxy endpoints at `/api/auth/*`
 - HTTP AdminService proxy endpoints at `/api/admin/*`
 - Native TCP binary Packet protocol to NebulaIM Gateway
 
@@ -25,6 +26,12 @@ Browser Admin Console
 NebulaIM Web Bridge
   -> gRPC metadata + protobuf
 AdminService
+
+Browser Register / Token Refresh
+  -> HTTP JSON /api/auth/*
+NebulaIM Web Bridge
+  -> gRPC protobuf
+UserService
 ```
 
 One browser WebSocket session owns one TCP Gateway connection. Do not share a TCP connection across browser users because Gateway session identity is connection-scoped.
@@ -36,6 +43,8 @@ BRIDGE_HOST=0.0.0.0
 BRIDGE_PORT=8080
 GATEWAY_TCP_HOST=127.0.0.1
 GATEWAY_TCP_PORT=9000
+USER_SERVICE_HOST=127.0.0.1
+USER_SERVICE_PORT=50051
 ADMIN_SERVICE_HOST=127.0.0.1
 ADMIN_SERVICE_PORT=50057
 CORS_ORIGIN=http://localhost:5173
@@ -64,6 +73,44 @@ npm run dev
 ```bash
 npm run build
 npm start
+```
+
+## Auth HTTP API
+
+The bridge exposes browser-safe HTTP endpoints for UserService operations that are not long-lived Gateway packets:
+
+- `POST /api/auth/register`
+- `POST /api/auth/refresh`
+
+Register request:
+
+```json
+{
+  "username": "alice",
+  "password": "password123",
+  "nickname": "Alice"
+}
+```
+
+Register response:
+
+```json
+{
+  "ok": true,
+  "userId": "10001",
+  "username": "alice",
+  "nickname": "Alice"
+}
+```
+
+The bridge forwards registration to `nebula.proto.UserService.Register` on `USER_SERVICE_HOST:USER_SERVICE_PORT`. The inspected backend validates empty username, empty password, duplicate username and password length, then returns `RegisterResponse { response, user_id }`.
+
+Refresh request:
+
+```json
+{
+  "token": "current-token"
+}
 ```
 
 ## Admin HTTP API
