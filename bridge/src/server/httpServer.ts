@@ -6,6 +6,7 @@ import express from "express";
 import type { BridgeConfig } from "../config.js";
 import { createAdminRouter } from "./adminRoutes.js";
 import { createAuthRouter } from "./authRoutes.js";
+import { createConversationRouter } from "./conversationRoutes.js";
 import { createRelationRouter } from "./relationRoutes.js";
 
 export function createHttpServer(config: BridgeConfig): http.Server {
@@ -26,6 +27,7 @@ export function createHttpServer(config: BridgeConfig): http.Server {
       gateway: `${config.gatewayTcpHost}:${config.gatewayTcpPort}`,
       user: `${config.userServiceHost}:${config.userServicePort}`,
       relation: `${config.relationServiceHost}:${config.relationServicePort}`,
+      conversation: `${config.conversationServiceHost}:${config.conversationServicePort}`,
       admin: `${config.adminServiceHost}:${config.adminServicePort}`,
       websocket: "/ws"
     });
@@ -33,6 +35,7 @@ export function createHttpServer(config: BridgeConfig): http.Server {
 
   app.use("/api/auth", createAuthRouter());
   app.use("/api/relation", createRelationRouter());
+  app.use("/api/conversations", createConversationRouter());
   app.use("/api/admin", createAdminRouter());
 
   if (config.webStaticDir && fs.existsSync(path.join(config.webStaticDir, "index.html"))) {

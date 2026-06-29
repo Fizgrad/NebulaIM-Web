@@ -12,7 +12,7 @@ import { simulateDelivery } from "../services/messageService";
 import { getGatewayClient } from "../services/gatewayClient";
 import { useSettingsStore } from "./settingsStore";
 import { clientLogger } from "../services/clientLogger";
-import { getBridgeUserInfo } from "../api/bridgeApi";
+import { getBridgeUserInfo, listBridgeConversations, markBridgeConversationRead } from "../api/bridgeApi";
 
 type MessagesByConversationId = Record<string, Message[]>;
 
@@ -22,6 +22,7 @@ type ChatState = {
   messagesByConversationId: MessagesByConversationId;
   gatewayStatus: GatewayStatus;
   setActiveConversationId: (conversationId: string | null) => void;
+  loadConversations: () => Promise<void>;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   retryMessage: (conversationId: string, messageId: string) => Promise<void>;
   receiveMessage: (message: Message) => void;
@@ -67,7 +68,7 @@ function initialMessages() {
   return useSettingsStore.getState().connectionMode === "mock" ? exampleMessages() : {};
 }
 
-function isNumericId(value?: string) {
+function isNumericId(value?: string): value is string {
   return Boolean(value && /^\d+$/.test(value));
 }
 
@@ -78,6 +79,28 @@ function directConversationId(userId: string) {
 function conversationIdForIncoming(message: Message) {
   if (message.groupId) return `group-${message.groupId}`;
   return directConversationId(message.fromUserId);
+}
+
+type BackendConversationInfo = Awaited<ReturnType<typeof listBridgeConversations>>[number];
+
+function mapBackendConversation(item: BackendConversationInfo): Conversation {
+  const groupId = item.groupId && item.groupId !== "0" ? item.groupId : undefined;
+  const peerUserId = item.peerUserId && item.peerUserId !== "0" ? item.peerUserId : undefined;
+  const isGroup = item.conversationType === 2 || Boolean(groupId);
+  return {
+    id: isGroup && groupId ? `group-${groupId}` : directConversationId(peerUserId ?? item.conversationId),
+    backendConversationId: item.conversationId,
+    type: isGroup ? "group" : "single",
+    title: isGroup ? `Group ${groupId ?? item.conversationId}` : `User ${peerUserId ?? item.conversationId}`,
+    online: !isGroup,
+    lastMessage: item.lastMessagePreview || "No messages yet",
+    lastMessageAt: Number(item.lastMessageAt || item.updatedAt || Date.now()),
+    unreadCount: item.unreadCount,
+    pinned: item.pinned,
+    muted: item.muted,
+    targetUserId: isGroup ? undefined : peerUserId,
+    groupId
+  };
 }
 
 async function deliverMessage(conversation: Conversation, message: Message, updateStatus: (status: MessageStatus) => void) {
@@ -120,7 +143,11 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
   }
 
   updateStatus("sent");
-  await gateway.ackMessage(serverMessageId, userId);
+  try {
+    await gateway.ackMessage(serverMessageId, userId);
+  } catch (error) {
+    clientLogger.warn("Message ACK failed after send succeeded", error);
+  }
   if (settings.connectionMode === "mock") {
     const delivered = await simulateDelivery(message.id);
     updateStatus(delivered.status);
@@ -142,6 +169,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setActiveConversationId: (activeConversationId) => {
     set({ activeConversationId });
     if (activeConversationId) get().markConversationRead(activeConversationId);
+  },
+  loadConversations: async () => {
+    const settings = useSettingsStore.getState();
+    if (settings.connectionMode !== "real") return;
+    const userId = useAuthStore.getState().user?.id;
+    if (!isNumericId(userId)) return;
+    const numericUserId = userId;
+    const conversations = await listBridgeConversations(settings.bridgeHttpUrl, numericUserId);
+    set((state) => {
+      const mapped = sortConversations(conversations.map(mapBackendConversation));
+      const activeStillExists = mapped.some((conversation) => conversation.id === state.activeConversationId);
+      return {
+        conversations: mapped,
+        activeConversationId: activeStillExists ? state.activeConversationId : null
+      };
+    });
   },
   sendMessage: async (conversationId, content) => {
     const trimmed = content.trim();
@@ -239,6 +282,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
   markConversationRead: (conversationId) => {
+    const conversation = get().conversations.find((item) => item.id === conversationId);
+    const settings = useSettingsStore.getState();
+    const userId = useAuthStore.getState().user?.id;
+    if (settings.connectionMode === "real" && conversation?.backendConversationId && isNumericId(userId)) {
+      const numericUserId = userId;
+      void markBridgeConversationRead(settings.bridgeHttpUrl, numericUserId, conversation.backendConversationId).catch((error) => {
+        clientLogger.warn("Mark conversation read failed", error);
+      });
+    }
     set((state) => ({
       conversations: state.conversations.map((conversation) =>
         conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation
@@ -309,6 +361,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const conversation: Conversation = {
       id: isNumericId(group.id) ? `group-${group.id}` : createId("c"),
+      backendConversationId: undefined,
       type: "group",
       title: group.name,
       lastMessage: "Group conversation ready",
@@ -326,6 +379,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     gateway.onMessage(get().receiveMessage);
     gateway.onStatusChange(get().setGatewayStatus);
     await gateway.connect();
+    if (useSettingsStore.getState().connectionMode === "real") {
+      try {
+        await get().loadConversations();
+      } catch (error) {
+        clientLogger.warn("Load conversations failed", error);
+      }
+    }
   },
   stopGatewaySession: () => {
     getGatewayClient().disconnect();

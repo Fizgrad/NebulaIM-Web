@@ -4,6 +4,7 @@ import type {
   GatewayStatus,
   LoginResult,
   MessageHandler,
+  RegisterResult,
   SendGroupMessagePayload,
   SendMessageResult,
   SendSingleMessagePayload,
@@ -13,9 +14,11 @@ import type { Message } from "../types/message";
 import { createClientEvent } from "./gatewayEvents";
 import { retryWithBackoff, isTransientError } from "../utils/retry";
 import { clientLogger } from "./clientLogger";
+import { registerBridgeUser } from "../api/bridgeApi";
 
 type RealGatewayClientOptions = {
   wsUrl: string;
+  httpUrl: string;
   autoReconnect: boolean;
   heartbeatIntervalMs: number;
 };
@@ -146,6 +149,15 @@ export class RealGatewayClient implements GatewayClient {
     this.emitStatus({ state: "disconnected", heartbeatOk: false, latency: 0 });
   }
 
+  async register(username: string, password: string, nickname: string): Promise<RegisterResult> {
+    const response = await registerBridgeUser(this.options.httpUrl, username, password, nickname);
+    return {
+      userId: response.userId,
+      username: response.username,
+      nickname: response.nickname
+    };
+  }
+
   async login(username: string, password: string): Promise<LoginResult> {
     const event = await this.requestWithRetry<LoginPayload>(
       () =>
@@ -264,6 +276,18 @@ export class RealGatewayClient implements GatewayClient {
 
   onStatusChange(handler: StatusHandler): void {
     this.statusHandlers.add(handler);
+    if (this.ws?.readyState === WebSocket.OPEN && this.gatewayReady) {
+      handler({
+        state: "connected",
+        heartbeatOk: true,
+        latency: this.latency,
+        connectedAt: this.connectedAt,
+        lastHeartbeatAt: Date.now(),
+        mode: "real",
+        transport: "bridge",
+        bridgeUrl: this.options.wsUrl
+      });
+    }
   }
 
   private request<TPayload>(event: ClientEvent, expectedType: string): Promise<ServerEvent<TPayload>> {
@@ -416,6 +440,7 @@ export class RealGatewayClient implements GatewayClient {
     const fullStatus: GatewayStatus = {
       ...status,
       mode: "real",
+      transport: "bridge",
       bridgeUrl: this.options.wsUrl
     };
     this.statusHandlers.forEach((handler) => handler(fullStatus));

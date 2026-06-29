@@ -3,6 +3,8 @@ export enum MessageType {
 
   LOGIN_REQ = 1001,
   LOGIN_RESP = 1002,
+  REGISTER_REQ = 1003,
+  REGISTER_RESP = 1004,
 
   HEARTBEAT_REQ = 1101,
   HEARTBEAT_RESP = 1102,
@@ -26,6 +28,7 @@ export enum MessageType {
 
 const requestResponseMap = new Map<MessageType, MessageType>([
   [MessageType.LOGIN_REQ, MessageType.LOGIN_RESP],
+  [MessageType.REGISTER_REQ, MessageType.REGISTER_RESP],
   [MessageType.HEARTBEAT_REQ, MessageType.HEARTBEAT_RESP],
   [MessageType.SEND_SINGLE_MSG_REQ, MessageType.SEND_SINGLE_MSG_RESP],
   [MessageType.SEND_GROUP_MSG_REQ, MessageType.SEND_GROUP_MSG_RESP],

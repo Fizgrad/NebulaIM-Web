@@ -13,7 +13,8 @@ export class ProtoRegistry {
   encode(typeName: string, payload: unknown): Buffer {
     const type = this.lookup(typeName);
     const value = payload as Record<string, unknown>;
-    const error = type.verify(value);
+    const message = type.fromObject(value);
+    const error = type.verify(message);
     if (error) {
       throw new BridgeError({
         code: "PROTO_ENCODE_FAILED",
@@ -21,7 +22,7 @@ export class ProtoRegistry {
         detail: payload
       });
     }
-    return Buffer.from(type.encode(type.create(value)).finish());
+    return Buffer.from(type.encode(message).finish());
   }
 
   decode<T>(typeName: string, buffer: Buffer): T {

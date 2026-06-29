@@ -67,6 +67,27 @@ type ListBridgeGroupMembersResponse = {
   members: RelationUserInfo[];
 };
 
+type BridgeConversationInfo = {
+  conversationId: string;
+  conversationType: number;
+  ownerUserId: string;
+  peerUserId: string;
+  groupId: string;
+  lastMessageId: string;
+  lastMessagePreview: string;
+  lastMessageAt: string | number;
+  unreadCount: number;
+  pinned: boolean;
+  muted: boolean;
+  deleted: boolean;
+  updatedAt: string | number;
+};
+
+type ListBridgeConversationsResponse = {
+  ok: boolean;
+  conversations: BridgeConversationInfo[];
+};
+
 export async function getBridgeHealth(baseUrl: string) {
   const response = await requestWithRetry(() => httpClient.get<BridgeHealth>(`${baseUrl.replace(/\/$/, "")}/health`), { retries: 1 });
   return response.data;
@@ -210,6 +231,31 @@ export async function listBridgeGroupMembers(baseUrl: string, groupId: string): 
     )
   );
   return response.members.map(toUser);
+}
+
+export async function listBridgeConversations(baseUrl: string, userId: string, page = 1, pageSize = 50) {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.get<ListBridgeConversationsResponse>(`${baseUrl.replace(/\/$/, "")}/api/conversations`, {
+          params: { userId, page, pageSize }
+        }),
+      { retries: 1 }
+    )
+  );
+  return response.conversations ?? [];
+}
+
+export async function markBridgeConversationRead(baseUrl: string, userId: string, conversationId: string): Promise<void> {
+  await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.post(`${baseUrl.replace(/\/$/, "")}/api/conversations/${conversationId}/read`, {
+          userId
+        }),
+      { retries: 1 }
+    )
+  );
 }
 
 function toUser(user: RelationUserInfo): User {

@@ -46,7 +46,7 @@ export function SettingsPage() {
   }
 
   return (
-    <PageContainer title="Settings" subtitle="Real Bridge integration controls for the NebulaIM C++ backend.">
+    <PageContainer title="Settings" subtitle="Gateway and service endpoint controls for the NebulaIM C++ backend.">
       <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
         <Card className="space-y-6 p-5">
           <section>
@@ -70,37 +70,32 @@ export function SettingsPage() {
           <section className="grid gap-4 md:grid-cols-2">
             <label className="flex items-center justify-between gap-3 rounded-lg border border-nebula-border bg-white/[0.04] p-4">
               <span>
-                <span className="block text-sm font-medium text-nebula-text">Connection Mode</span>
-                <span className="mt-1 block text-xs text-nebula-muted">
-                  {settings.connectionMode === "real"
-                    ? "Real Bridge is active. Browser traffic is proxied to Gateway and UserService."
-                    : "Example mode is active from VITE_CONNECTION_MODE=mock."}
-                </span>
+                <span className="block text-sm font-medium text-nebula-text">Backend Mode</span>
+                <span className="mt-1 block text-xs text-nebula-muted">C++ Gateway and backend services are active.</span>
               </span>
               <span className="rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-xs font-medium text-cyan-100">
-                {settings.connectionMode === "real" ? "Real Bridge" : "Example"}
+                Real
               </span>
             </label>
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-nebula-border bg-white/[0.04] p-4">
-              <span>
-                <span className="block text-sm font-medium text-nebula-text">Example Send Failure</span>
-                <span className="mt-1 block text-xs text-nebula-muted">Only affects the offline example client.</span>
+            <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-4">
+              <span className="block text-sm font-medium text-nebula-text">Gateway Transport</span>
+              <span className="mt-1 block text-xs text-nebula-muted">WebSocket binary Packet + Protobuf.</span>
+              <span className="mt-3 inline-flex rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1 text-xs font-medium text-emerald-100">
+                Direct Gateway
               </span>
-              <input
-                type="checkbox"
-                checked={settings.randomFailureEnabled}
-                onChange={(event) => settings.setRandomFailureEnabled(event.target.checked)}
-              />
-            </label>
+            </div>
           </section>
 
           <section className="grid gap-4 md:grid-cols-2">
             <Input label="Gateway TCP Address" value={settings.gatewayUrl} onChange={(event) => settings.setGatewayUrl(event.target.value)} />
-            <Input label="WebSocket Gateway URL" value={settings.websocketUrl} onChange={(event) => settings.setWebsocketUrl(event.target.value)} />
+            <Input
+              label="Direct Gateway WebSocket URL"
+              value={settings.directGatewayWsUrl}
+              onChange={(event) => settings.setDirectGatewayWsUrl(event.target.value)}
+            />
           </section>
 
           <section className="grid gap-4 md:grid-cols-2">
-            <Input label="Bridge WebSocket URL" value={settings.bridgeWsUrl} onChange={(event) => settings.setBridgeWsUrl(event.target.value)} />
             <Input label="Bridge HTTP URL" value={settings.bridgeHttpUrl} onChange={(event) => settings.setBridgeHttpUrl(event.target.value)} />
             <Input
               label="Heartbeat Interval"
@@ -113,7 +108,7 @@ export function SettingsPage() {
             <label className="flex items-center justify-between gap-3 rounded-lg border border-nebula-border bg-white/[0.04] p-4">
               <span>
                 <span className="block text-sm font-medium text-nebula-text">Auto Reconnect</span>
-                <span className="mt-1 block text-xs text-nebula-muted">Reconnect Real Bridge WebSocket after disconnect.</span>
+                <span className="mt-1 block text-xs text-nebula-muted">Reconnect Gateway WebSocket after disconnect.</span>
               </span>
               <input type="checkbox" checked={settings.autoReconnect} onChange={(event) => settings.setAutoReconnect(event.target.checked)} />
             </label>
@@ -124,7 +119,7 @@ export function SettingsPage() {
           <h2 className="text-base font-semibold text-nebula-text">Local Actions</h2>
           <Button variant="primary" className="w-full justify-start" onClick={() => void handleTestConnection()} disabled={testState === "loading"}>
             {testState === "loading" ? <Spinner /> : testState === "success" ? <CheckCircle2 className="h-4 w-4" /> : <Wifi className="h-4 w-4" />}
-            Test Bridge
+            Test Services
           </Button>
           {testMessage ? (
             <div

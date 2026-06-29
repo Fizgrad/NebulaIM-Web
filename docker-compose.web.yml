@@ -24,6 +24,8 @@ services:
       - USER_SERVICE_PORT=50051
       - RELATION_SERVICE_HOST=host.docker.internal
       - RELATION_SERVICE_PORT=50053
+      - CONVERSATION_SERVICE_HOST=host.docker.internal
+      - CONVERSATION_SERVICE_PORT=50056
       - ADMIN_SERVICE_HOST=host.docker.internal
       - ADMIN_SERVICE_PORT=50057
       - CORS_ORIGIN=http://localhost:5173

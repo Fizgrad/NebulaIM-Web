@@ -1,11 +1,12 @@
 import { ackMessage, pullOfflineMessages, sendGroupMessage, sendSingleMessage } from "../api/chatApi";
-import { login as mockLogin } from "../api/authApi";
+import { login as mockLogin, register as mockRegister } from "../api/authApi";
 import { delay } from "../api/client";
 import type {
   GatewayClient,
   GatewayStatus,
   LoginResult,
   MessageHandler,
+  RegisterResult,
   SendGroupMessagePayload,
   SendMessageResult,
   SendSingleMessagePayload,
@@ -14,6 +15,7 @@ import type {
 import type { Message } from "../types/message";
 import { createId } from "../utils/id";
 import { MockSocket } from "./mockSocket";
+import { DirectGatewayClient } from "./directGatewayClient";
 import { RealGatewayClient } from "./realGatewayClient";
 import { useSettingsStore } from "../store/settingsStore";
 
@@ -29,6 +31,15 @@ export class MockGatewayClient implements GatewayClient {
 
   disconnect() {
     this.socket.disconnect();
+  }
+
+  async register(username: string, password: string, nickname: string): Promise<RegisterResult> {
+    const response = await mockRegister(username, password, nickname);
+    return {
+      userId: response.user.id,
+      username: response.user.username,
+      nickname: response.user.nickname
+    };
   }
 
   async login(username: string, password: string): Promise<LoginResult> {
@@ -89,8 +100,16 @@ let activeSignature = "";
 function createGatewayClient(): GatewayClient {
   const settings = useSettingsStore.getState();
   if (settings.connectionMode === "real") {
+    if (settings.gatewayTransport === "direct") {
+      return new DirectGatewayClient({
+        wsUrl: settings.directGatewayWsUrl,
+        autoReconnect: settings.autoReconnect,
+        heartbeatIntervalMs: settings.heartbeatIntervalMs
+      });
+    }
     return new RealGatewayClient({
       wsUrl: settings.bridgeWsUrl,
+      httpUrl: settings.bridgeHttpUrl,
       autoReconnect: settings.autoReconnect,
       heartbeatIntervalMs: settings.heartbeatIntervalMs
     });
@@ -102,7 +121,10 @@ function getSignature() {
   const settings = useSettingsStore.getState();
   return [
     settings.connectionMode,
+    settings.gatewayTransport,
+    settings.directGatewayWsUrl,
     settings.bridgeWsUrl,
+    settings.bridgeHttpUrl,
     settings.autoReconnect,
     settings.heartbeatIntervalMs
   ].join("|");

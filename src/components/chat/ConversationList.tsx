@@ -12,6 +12,7 @@ export function ConversationList() {
   const setActiveConversationId = useChatStore((state) => state.setActiveConversationId);
   const openDirectConversation = useChatStore((state) => state.openDirectConversation);
   const connectionMode = useSettingsStore((state) => state.connectionMode);
+  const gatewayTransport = useSettingsStore((state) => state.gatewayTransport);
   const [query, setQuery] = useState("");
   const [directUserId, setDirectUserId] = useState("");
   const [directError, setDirectError] = useState("");
@@ -48,7 +49,11 @@ export function ConversationList() {
         <div className="mb-4">
           <h2 className="text-base font-semibold text-nebula-text">Messages</h2>
           <p className="mt-1 text-xs text-nebula-muted">
-            {connectionMode === "real" ? "Real Bridge + ACK timeline" : "Example WebSocket + ACK timeline"}
+            {connectionMode === "real"
+              ? gatewayTransport === "direct"
+                ? "Direct Gateway binary + ACK timeline"
+                : "Real Bridge + ACK timeline"
+              : "Example WebSocket + ACK timeline"}
           </p>
         </div>
         <Input

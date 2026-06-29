@@ -96,7 +96,7 @@ export function LandingPage() {
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-nebula-text">Real Gateway Session</p>
-                <p className="mt-1 text-xs text-nebula-muted">Browser WebSocket proxied through the NebulaIM Web Bridge</p>
+                <p className="mt-1 text-xs text-nebula-muted">Browser WebSocket binary Packet + Protobuf</p>
               </div>
               <Badge tone="emerald">Online</Badge>
             </div>
@@ -129,7 +129,7 @@ export function LandingPage() {
             <div>
               <h2 className="text-2xl font-semibold text-white">Core Capabilities</h2>
               <p className="mt-2 text-sm text-nebula-muted">
-                Login, sessions, direct chat, Gateway heartbeat, offline pull and ACK status are wired through the Real Bridge path.
+                Login, sessions, direct chat, Gateway heartbeat, offline pull and ACK status are wired through the C++ Gateway path.
               </p>
             </div>
           </div>
@@ -154,7 +154,7 @@ export function LandingPage() {
             <div className="mb-6">
               <h2 className="text-2xl font-semibold text-white">Architecture Highlights</h2>
               <p className="mt-2 text-sm text-nebula-muted">
-                Browser clients cannot connect to native TCP directly, so this client keeps Gateway access behind a replaceable service boundary.
+                Browser clients use the Gateway WebSocket endpoint with the same NebulaIM Packet protocol as native TCP clients.
               </p>
             </div>
             <div className="grid gap-3 md:grid-cols-6">

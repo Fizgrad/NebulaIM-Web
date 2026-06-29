@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { User } from "../types/user";
 import * as authApi from "../api/authApi";
-import { refreshBridgeToken, registerBridgeUser } from "../api/bridgeApi";
+import { refreshBridgeToken } from "../api/bridgeApi";
 import { getGatewayClient, resetGatewayClient } from "../services/gatewayClient";
 import { useSettingsStore } from "./settingsStore";
 import { normalizeExpireAt, isTokenExpiringSoon } from "../services/authToken";
@@ -49,8 +49,8 @@ export const useAuthStore = create<AuthState>()(
               avatarColor: "from-violet-500 to-cyan-400",
               status: "online",
               registeredAt: Date.now(),
-              gateway: settings.gatewayUrl,
-              connectionId: `bridge-${result.userId}`
+              gateway: settings.gatewayTransport === "direct" ? settings.directGatewayWsUrl : settings.bridgeWsUrl,
+              connectionId: `${settings.gatewayTransport}-${result.userId}`
             };
             set({
               user,
@@ -87,7 +87,8 @@ export const useAuthStore = create<AuthState>()(
         try {
           const settings = useSettingsStore.getState();
           if (settings.connectionMode === "real") {
-            await registerBridgeUser(settings.bridgeHttpUrl, username, password, nickname);
+            const gateway = getGatewayClient();
+            await gateway.register(username, password, nickname);
           } else {
             await authApi.register(username, password, nickname);
           }

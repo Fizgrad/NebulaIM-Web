@@ -141,9 +141,6 @@ export function DashboardPage() {
                 </span>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Badge tone={settings.connectionMode === "real" ? "cyan" : "slate"}>
-                  Mode: {settings.connectionMode === "real" ? "Real" : "Example"}
-                </Badge>
                 <Badge tone={gatewayStatus.state === "connected" ? "emerald" : "amber"}>
                   TCP: {gatewayStatus.state}
                 </Badge>
@@ -194,9 +191,7 @@ export function DashboardPage() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <h2 className="text-sm font-semibold text-nebula-text">Live Metrics Require AdminService Token</h2>
-                    <p className="mt-1 text-sm text-nebula-muted">
-                      Dashboard no longer falls back to sample metrics. Enter an AdminService token to load real system stats.
-                    </p>
+                    <p className="mt-1 text-sm text-nebula-muted">Enter an AdminService token to load live system stats.</p>
                     <form className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]" onSubmit={handleTokenSubmit}>
                       <Input
                         label="Admin Token"

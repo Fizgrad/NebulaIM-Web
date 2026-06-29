@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { ConnectionMode } from "../types/gateway";
+import type { ConnectionMode, GatewayTransport } from "../types/gateway";
 
 export type ThemeMode = "dark" | "light" | "system";
 
@@ -8,8 +8,10 @@ type SettingsState = {
   theme: ThemeMode;
   mockMode: boolean;
   connectionMode: ConnectionMode;
+  gatewayTransport: GatewayTransport;
   gatewayUrl: string;
   websocketUrl: string;
+  directGatewayWsUrl: string;
   bridgeWsUrl: string;
   bridgeHttpUrl: string;
   autoReconnect: boolean;
@@ -18,8 +20,10 @@ type SettingsState = {
   setTheme: (theme: ThemeMode) => void;
   setMockMode: (enabled: boolean) => void;
   setConnectionMode: (mode: ConnectionMode) => void;
+  setGatewayTransport: (transport: GatewayTransport) => void;
   setGatewayUrl: (url: string) => void;
   setWebsocketUrl: (url: string) => void;
+  setDirectGatewayWsUrl: (url: string) => void;
   setBridgeWsUrl: (url: string) => void;
   setBridgeHttpUrl: (url: string) => void;
   setAutoReconnect: (enabled: boolean) => void;
@@ -34,8 +38,10 @@ const defaults = {
   theme: "dark" as ThemeMode,
   mockMode: connectionModeDefault === "mock",
   connectionMode: connectionModeDefault,
+  gatewayTransport: defaultGatewayTransport(),
   gatewayUrl: "tcp://localhost:9000",
-  websocketUrl: import.meta.env.VITE_BRIDGE_WS_URL ?? defaultBridgeWsUrl(),
+  websocketUrl: import.meta.env.VITE_GATEWAY_WS_URL ?? defaultDirectGatewayWsUrl(),
+  directGatewayWsUrl: import.meta.env.VITE_GATEWAY_WS_URL ?? defaultDirectGatewayWsUrl(),
   bridgeWsUrl: import.meta.env.VITE_BRIDGE_WS_URL ?? defaultBridgeWsUrl(),
   bridgeHttpUrl: import.meta.env.VITE_BRIDGE_HTTP_URL ?? defaultBridgeHttpUrl(),
   autoReconnect: true,
@@ -49,13 +55,25 @@ function defaultConnectionMode(): ConnectionMode {
   return "real";
 }
 
+function defaultGatewayTransport(): GatewayTransport {
+  const configured = import.meta.env.VITE_GATEWAY_TRANSPORT;
+  if (configured === "bridge" || configured === "direct") return configured;
+  return "direct";
+}
+
+function defaultDirectGatewayWsUrl() {
+  return "ws://localhost:9000/";
+}
+
 function defaultBridgeHttpUrl() {
   if (typeof window === "undefined") return "http://localhost:8080";
+  if (["5173", "5174"].includes(window.location.port)) return "http://localhost:8080";
   return window.location.origin;
 }
 
 function defaultBridgeWsUrl() {
   if (typeof window === "undefined") return "ws://localhost:8080/ws";
+  if (["5173", "5174"].includes(window.location.port)) return "ws://localhost:8080/ws";
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}/ws`;
 }
@@ -67,8 +85,10 @@ export const useSettingsStore = create<SettingsState>()(
       setTheme: (theme) => set({ theme }),
       setMockMode: (mockMode) => set({ mockMode }),
       setConnectionMode: (connectionMode) => set({ connectionMode, mockMode: connectionMode === "mock" }),
+      setGatewayTransport: (gatewayTransport) => set({ gatewayTransport }),
       setGatewayUrl: (gatewayUrl) => set({ gatewayUrl }),
       setWebsocketUrl: (websocketUrl) => set({ websocketUrl }),
+      setDirectGatewayWsUrl: (directGatewayWsUrl) => set({ directGatewayWsUrl, websocketUrl: directGatewayWsUrl }),
       setBridgeWsUrl: (bridgeWsUrl) => set({ bridgeWsUrl, websocketUrl: bridgeWsUrl }),
       setBridgeHttpUrl: (bridgeHttpUrl) => set({ bridgeHttpUrl }),
       setAutoReconnect: (autoReconnect) => set({ autoReconnect }),
@@ -78,7 +98,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "nebulaim-settings",
-      version: 5,
+      version: 6,
       merge: (persistedState, currentState) => {
         const state = persistedState as Partial<SettingsState> | undefined;
         return {
@@ -86,16 +106,19 @@ export const useSettingsStore = create<SettingsState>()(
           ...state,
           connectionMode: defaults.connectionMode,
           mockMode: defaults.mockMode,
+          gatewayTransport: defaults.gatewayTransport,
           randomFailureEnabled: state?.randomFailureEnabled ?? defaults.randomFailureEnabled
         };
       },
       migrate: (persistedState, version) => {
         const state = persistedState as Partial<SettingsState>;
-        if (version < 5) {
+        if (version < 6) {
           return {
             ...state,
             connectionMode: defaults.connectionMode,
             mockMode: defaults.mockMode,
+            gatewayTransport: defaults.gatewayTransport,
+            directGatewayWsUrl: state.directGatewayWsUrl ?? defaults.directGatewayWsUrl,
             bridgeWsUrl: state.bridgeWsUrl ?? defaults.bridgeWsUrl,
             bridgeHttpUrl: state.bridgeHttpUrl ?? defaults.bridgeHttpUrl,
             websocketUrl: state.websocketUrl ?? defaults.websocketUrl

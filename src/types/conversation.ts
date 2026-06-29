@@ -2,6 +2,7 @@ export type ConversationType = "single" | "group";
 
 export type Conversation = {
   id: string;
+  backendConversationId?: string;
   type: ConversationType;
   title: string;
   avatar?: string;
@@ -9,6 +10,8 @@ export type Conversation = {
   lastMessage: string;
   lastMessageAt: number;
   unreadCount: number;
+  pinned?: boolean;
+  muted?: boolean;
   targetUserId?: string;
   groupId?: string;
 };

@@ -8,6 +8,7 @@ Browsers cannot open native TCP connections to the C++ Gateway on port `9000`, s
 - HTTP health endpoints at `/health` and `/info`
 - HTTP UserService auth proxy endpoints at `/api/auth/*`
 - HTTP RelationService proxy endpoints at `/api/relation/*`
+- HTTP ConversationService proxy endpoints at `/api/conversations/*`
 - HTTP AdminService proxy endpoints at `/api/admin/*`
 - Native TCP binary Packet protocol to NebulaIM Gateway
 
@@ -39,6 +40,12 @@ Browser Contacts / Groups
 NebulaIM Web Bridge
   -> gRPC protobuf
 RelationService
+
+Browser Conversation List
+  -> HTTP JSON /api/conversations/*
+NebulaIM Web Bridge
+  -> gRPC protobuf
+ConversationService
 ```
 
 One browser WebSocket session owns one TCP Gateway connection. Do not share a TCP connection across browser users because Gateway session identity is connection-scoped.
@@ -54,6 +61,8 @@ USER_SERVICE_HOST=127.0.0.1
 USER_SERVICE_PORT=50051
 RELATION_SERVICE_HOST=127.0.0.1
 RELATION_SERVICE_PORT=50053
+CONVERSATION_SERVICE_HOST=127.0.0.1
+CONVERSATION_SERVICE_PORT=50056
 ADMIN_SERVICE_HOST=127.0.0.1
 ADMIN_SERVICE_PORT=50057
 CORS_ORIGIN=http://localhost:5173
@@ -135,6 +144,18 @@ The bridge exposes browser-safe RelationService endpoints:
 - `GET /api/relation/groups/:groupId/members`
 
 The bridge forwards these calls to `nebula.proto.RelationService` on `RELATION_SERVICE_HOST:RELATION_SERVICE_PORT`. IDs must be numeric backend IDs. The default frontend does not load mock friends or mock groups; mock records are only used by `npm run dev:example`.
+
+## Conversation HTTP API
+
+The bridge exposes browser-safe ConversationService endpoints:
+
+- `GET /api/conversations?userId=<id>&page=1&pageSize=50`
+- `POST /api/conversations/:conversationId/read` with `{ "userId": "21" }`
+- `DELETE /api/conversations/:conversationId` with `{ "userId": "21" }`
+- `POST /api/conversations/:conversationId/pin` with `{ "userId": "21", "value": true }`
+- `POST /api/conversations/:conversationId/mute` with `{ "userId": "21", "value": true }`
+
+The bridge forwards these calls to `nebula.proto.ConversationService` on `CONVERSATION_SERVICE_HOST:CONVERSATION_SERVICE_PORT`.
 
 ## Admin HTTP API
 
@@ -219,6 +240,8 @@ Body is a Protobuf encoded message. `PacketCodec` handles sticky packets and hal
 ```text
 LOGIN_REQ=1001
 LOGIN_RESP=1002
+REGISTER_REQ=1003
+REGISTER_RESP=1004
 HEARTBEAT_REQ=1101
 HEARTBEAT_RESP=1102
 SEND_SINGLE_MSG_REQ=2001
@@ -245,6 +268,8 @@ The bridge currently expects these fully qualified names:
 
 - `nebula.proto.LoginRequest`
 - `nebula.proto.LoginResponse`
+- `nebula.proto.RegisterRequest`
+- `nebula.proto.RegisterResponse`
 - `nebula.proto.SendSingleMessageRequest`
 - `nebula.proto.SendSingleMessageResponse`
 - `nebula.proto.SendGroupMessageRequest`
@@ -277,6 +302,13 @@ The bridge currently expects these fully qualified names:
 - `nebula.proto.LeaveGroupRequest`
 - `nebula.proto.ListGroupMembersRequest`
 - `nebula.proto.ListGroupMembersResponse`
+- `nebula.proto.ConversationService`
+- `nebula.proto.ListConversationsRequest`
+- `nebula.proto.ListConversationsResponse`
+- `nebula.proto.ConversationMarkReadRequest`
+- `nebula.proto.ConversationDeleteRequest`
+- `nebula.proto.ConversationPinRequest`
+- `nebula.proto.ConversationMuteRequest`
 
 These files must be synchronized with the real NebulaIM backend proto definitions before production use.
 
@@ -292,7 +324,7 @@ The inspected `~/NebulaIM` backend also supports WebSocket upgrade directly insi
 WebSocket Binary Payload = NebulaIM PacketCodec bytes
 ```
 
-This bridge remains useful when the frontend wants a JSON WebSocket API and HTTP health endpoints. A future frontend direct mode can connect to the C++ Gateway WebSocket endpoint and send binary PacketCodec frames directly.
+The frontend now includes a direct mode that connects to the C++ Gateway WebSocket endpoint and sends binary PacketCodec frames directly. This bridge remains useful for HTTP health/admin/relation/conversation endpoints and as a JSON WebSocket fallback.
 
 ## Manual Smoke Test
 
@@ -310,7 +342,7 @@ The smoke test connects to `ws://localhost:8080/ws`, sends `auth.login`, `connec
 3. Confirm Gateway TCP listens on `127.0.0.1:9000`.
 4. Confirm AdminService listens on `127.0.0.1:50057`.
 5. Start this bridge.
-6. Switch the frontend Settings page to Real Bridge.
+6. In the frontend Settings page, use Direct Gateway for C++ WebSocket binary mode or Bridge for Node JSON WebSocket fallback.
 7. Login and send a message.
 8. Open `/admin`, enter an AdminService token and call health/outbox/cleanup.
 9. Check Gateway, MessageService, PushService and AdminService logs.

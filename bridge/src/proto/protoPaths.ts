@@ -6,6 +6,8 @@ export const protoFiles = [
   "user.proto",
   "message.proto",
   "relation.proto",
+  "conversation.proto",
+  "device.proto",
   "push.proto",
   "gateway.proto"
 ];
