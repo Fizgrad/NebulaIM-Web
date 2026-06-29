@@ -33,13 +33,24 @@ const defaults = {
   mockMode: true,
   connectionMode: "mock" as ConnectionMode,
   gatewayUrl: "tcp://localhost:9000",
-  websocketUrl: "ws://localhost:8080/ws",
-  bridgeWsUrl: import.meta.env.VITE_BRIDGE_WS_URL ?? "ws://localhost:8080/ws",
-  bridgeHttpUrl: import.meta.env.VITE_BRIDGE_HTTP_URL ?? "http://localhost:8080",
+  websocketUrl: import.meta.env.VITE_BRIDGE_WS_URL ?? defaultBridgeWsUrl(),
+  bridgeWsUrl: import.meta.env.VITE_BRIDGE_WS_URL ?? defaultBridgeWsUrl(),
+  bridgeHttpUrl: import.meta.env.VITE_BRIDGE_HTTP_URL ?? defaultBridgeHttpUrl(),
   autoReconnect: true,
   heartbeatIntervalMs: 15000,
   randomFailureEnabled: true
 };
+
+function defaultBridgeHttpUrl() {
+  if (typeof window === "undefined") return "http://localhost:8080";
+  return window.location.origin;
+}
+
+function defaultBridgeWsUrl() {
+  if (typeof window === "undefined") return "ws://localhost:8080/ws";
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws`;
+}
 
 export const useSettingsStore = create<SettingsState>()(
   persist(

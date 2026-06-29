@@ -1,4 +1,6 @@
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
 import cors from "cors";
 import express from "express";
 import type { BridgeConfig } from "../config.js";
@@ -26,6 +28,17 @@ export function createHttpServer(config: BridgeConfig): http.Server {
   });
 
   app.use("/api/admin", createAdminRouter());
+
+  if (config.webStaticDir && fs.existsSync(path.join(config.webStaticDir, "index.html"))) {
+    app.use(express.static(config.webStaticDir, { index: false }));
+    app.use((req, res, next) => {
+      if (req.method !== "GET" || req.path.startsWith("/api/") || req.path === "/ws") {
+        next();
+        return;
+      }
+      res.sendFile(path.join(config.webStaticDir, "index.html"));
+    });
+  }
 
   return http.createServer(app);
 }

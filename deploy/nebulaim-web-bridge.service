@@ -1,0 +1,16 @@
+[Unit]
+Description=NebulaIM Web Bridge and Frontend
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/nebulaim-web/bridge
+EnvironmentFile=/opt/nebulaim-web/bridge.env
+ExecStart=/root/.nvm/versions/node/v26.4.0/bin/node /opt/nebulaim-web/bridge/dist/src/index.js
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+SyslogIdentifier=nebulaim-web
+
+[Install]
+WantedBy=multi-user.target

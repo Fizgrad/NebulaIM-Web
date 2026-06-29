@@ -15,7 +15,8 @@ const configSchema = z.object({
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   HEARTBEAT_INTERVAL_MS: z.coerce.number().int().min(1000).default(15000),
   GATEWAY_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).default(5000),
-  PROTO_DIR: z.string().default("../proto")
+  PROTO_DIR: z.string().default("../proto"),
+  WEB_STATIC_DIR: z.string().default("")
 });
 
 const parsed = configSchema.safeParse(process.env);
@@ -39,7 +40,8 @@ export const config = {
   logLevel: raw.LOG_LEVEL,
   heartbeatIntervalMs: raw.HEARTBEAT_INTERVAL_MS,
   gatewayRequestTimeoutMs: raw.GATEWAY_REQUEST_TIMEOUT_MS,
-  protoDir: path.resolve(process.cwd(), raw.PROTO_DIR)
+  protoDir: path.resolve(process.cwd(), raw.PROTO_DIR),
+  webStaticDir: raw.WEB_STATIC_DIR ? path.resolve(process.cwd(), raw.WEB_STATIC_DIR) : ""
 };
 
 export type BridgeConfig = typeof config;
