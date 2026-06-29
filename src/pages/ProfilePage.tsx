@@ -11,7 +11,7 @@ export function ProfilePage() {
   const token = useAuthStore((state) => state.token);
 
   return (
-    <PageContainer title="Profile" subtitle="Current mock identity and Gateway connection metadata.">
+    <PageContainer title="Profile" subtitle="Current NebulaIM identity and Gateway connection metadata.">
       <Card className="max-w-3xl p-5">
         <div className="flex flex-col gap-5 md:flex-row md:items-center">
           <Avatar name={user?.nickname ?? "Nebula Operator"} color={user?.avatarColor} size="xl" online />

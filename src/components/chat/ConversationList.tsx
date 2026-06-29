@@ -48,7 +48,7 @@ export function ConversationList() {
         <div className="mb-4">
           <h2 className="text-base font-semibold text-nebula-text">Messages</h2>
           <p className="mt-1 text-xs text-nebula-muted">
-            {connectionMode === "real" ? "Real Bridge + ACK timeline" : "Mock WebSocket + ACK timeline"}
+            {connectionMode === "real" ? "Real Bridge + ACK timeline" : "Example WebSocket + ACK timeline"}
           </p>
         </div>
         <Input

@@ -15,7 +15,7 @@ export function RegisterPage() {
         <Card className="p-6">
           <div className="mb-6">
             <h1 className="text-2xl font-semibold text-white">Create account</h1>
-            <p className="mt-2 text-sm text-nebula-muted">Mock registration validates input and returns to login.</p>
+            <p className="mt-2 text-sm text-nebula-muted">Create a NebulaIM account through the Web Bridge and UserService.</p>
           </div>
           <RegisterForm />
         </Card>

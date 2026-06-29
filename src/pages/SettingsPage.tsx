@@ -10,7 +10,6 @@ import { Spinner } from "../components/common/Spinner";
 import { useAuthStore } from "../store/authStore";
 import { useChatStore } from "../store/chatStore";
 import { useSettingsStore, type ThemeMode } from "../store/settingsStore";
-import { resetGatewayClient } from "../services/gatewayClient";
 import { cn } from "../utils/cn";
 
 const themes: ThemeMode[] = ["dark", "light", "system"];
@@ -47,7 +46,7 @@ export function SettingsPage() {
   }
 
   return (
-    <PageContainer title="Settings" subtitle="Mock mode and Real Bridge integration controls.">
+    <PageContainer title="Settings" subtitle="Real Bridge integration controls for the NebulaIM C++ backend.">
       <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
         <Card className="space-y-6 p-5">
           <section>
@@ -68,49 +67,24 @@ export function SettingsPage() {
             </div>
           </section>
 
-          <section>
-            <h2 className="text-base font-semibold text-nebula-text">Connection Mode</h2>
-            <div className="mt-3 inline-flex rounded-lg border border-nebula-border bg-white/[0.04] p-1">
-              {[
-                ["mock", "Mock"],
-                ["real", "Real Bridge"]
-              ].map(([mode, label]) => (
-                <button
-                  key={mode}
-                  onClick={() => {
-                    settings.setConnectionMode(mode as "mock" | "real");
-                    resetGatewayClient();
-                  }}
-                  className={cn(
-                    "h-9 rounded-md px-4 text-sm transition",
-                    settings.connectionMode === mode ? "bg-cyan-300/14 text-cyan-100" : "text-nebula-muted hover:text-nebula-text"
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </section>
-
           <section className="grid gap-4 md:grid-cols-2">
             <label className="flex items-center justify-between gap-3 rounded-lg border border-nebula-border bg-white/[0.04] p-4">
               <span>
-                <span className="block text-sm font-medium text-nebula-text">Mock API Mode</span>
-                <span className="mt-1 block text-xs text-nebula-muted">Use Promise-based mock APIs for all client flows.</span>
+                <span className="block text-sm font-medium text-nebula-text">Connection Mode</span>
+                <span className="mt-1 block text-xs text-nebula-muted">
+                  {settings.connectionMode === "real"
+                    ? "Real Bridge is active. Browser traffic is proxied to Gateway and UserService."
+                    : "Example mode is active from VITE_CONNECTION_MODE=mock."}
+                </span>
               </span>
-              <input
-                type="checkbox"
-                checked={settings.connectionMode === "mock"}
-                onChange={(event) => {
-                  settings.setConnectionMode(event.target.checked ? "mock" : "real");
-                  resetGatewayClient();
-                }}
-              />
+              <span className="rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-xs font-medium text-cyan-100">
+                {settings.connectionMode === "real" ? "Real Bridge" : "Example"}
+              </span>
             </label>
             <label className="flex items-center justify-between gap-3 rounded-lg border border-nebula-border bg-white/[0.04] p-4">
               <span>
-                <span className="block text-sm font-medium text-nebula-text">Random Send Failure</span>
-                <span className="mt-1 block text-xs text-nebula-muted">Simulate occasional failed messages.</span>
+                <span className="block text-sm font-medium text-nebula-text">Example Send Failure</span>
+                <span className="mt-1 block text-xs text-nebula-muted">Only affects the offline example client.</span>
               </span>
               <input
                 type="checkbox"

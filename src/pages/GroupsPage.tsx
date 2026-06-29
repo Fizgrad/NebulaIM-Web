@@ -18,7 +18,7 @@ export function GroupsPage() {
   }
 
   return (
-    <PageContainer title="Groups" subtitle="Create, join, leave and inspect mock group conversations.">
+    <PageContainer title="Groups" subtitle="Create, join, leave and inspect group conversations.">
       <GroupList onMessage={handleMessage} onMembers={setSelectedGroup} />
       <Modal open={Boolean(selectedGroup)} title={selectedGroup?.name ?? "Group members"} onClose={() => setSelectedGroup(null)}>
         <GroupMemberList members={selectedGroup?.members ?? []} />

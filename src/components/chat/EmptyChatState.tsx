@@ -9,7 +9,7 @@ export function EmptyChatState() {
         </div>
         <h2 className="mt-5 text-lg font-semibold text-nebula-text">Select a conversation to start messaging</h2>
         <p className="mt-2 max-w-sm text-sm text-nebula-muted">
-          The mock gateway will stream incoming messages, heartbeat updates and delivery states.
+          Use a numeric backend user ID to open a real direct chat through the Web Bridge.
         </p>
       </div>
     </div>

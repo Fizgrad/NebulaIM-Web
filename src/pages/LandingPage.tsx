@@ -95,8 +95,8 @@ export function LandingPage() {
             <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/70 to-transparent" />
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-nebula-text">Mock Gateway Session</p>
-                <p className="mt-1 text-xs text-nebula-muted">TCP Gateway represented through browser-safe WebSocket abstraction</p>
+                <p className="text-sm font-medium text-nebula-text">Real Gateway Session</p>
+                <p className="mt-1 text-xs text-nebula-muted">Browser WebSocket proxied through the NebulaIM Web Bridge</p>
               </div>
               <Badge tone="emerald">Online</Badge>
             </div>
@@ -128,7 +128,9 @@ export function LandingPage() {
           <div className="mb-7 flex items-end justify-between gap-4">
             <div>
               <h2 className="text-2xl font-semibold text-white">Core Capabilities</h2>
-              <p className="mt-2 text-sm text-nebula-muted">Login, sessions, single chat, group chat, presence, offline messages and ACK status are covered by mock flows.</p>
+              <p className="mt-2 text-sm text-nebula-muted">
+                Login, sessions, direct chat, Gateway heartbeat, offline pull and ACK status are wired through the Real Bridge path.
+              </p>
             </div>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">

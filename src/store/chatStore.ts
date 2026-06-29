@@ -270,7 +270,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       avatarColor: "from-cyan-500 to-blue-500",
       status: "online",
       registeredAt: Date.now(),
-      gateway: settings.connectionMode === "real" ? "UserService" : "Mock",
+      gateway: settings.connectionMode === "real" ? "UserService" : "Example",
       connectionId: `user-${normalizedUserId}`
     };
 

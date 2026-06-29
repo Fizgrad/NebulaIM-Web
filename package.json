@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:example": "VITE_CONNECTION_MODE=mock vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",

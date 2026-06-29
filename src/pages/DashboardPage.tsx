@@ -86,7 +86,7 @@ export function DashboardPage() {
       <main className="mx-auto max-w-7xl px-5 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-semibold text-white">NebulaIM Dashboard</h1>
-          <p className="mt-2 text-sm text-nebula-muted">Mock runtime state for Gateway, services, Kafka pipeline and storage dependencies.</p>
+          <p className="mt-2 text-sm text-nebula-muted">Bridge health, Gateway connectivity and runtime metrics for NebulaIM.</p>
         </div>
 
         {!metrics ? (
@@ -100,7 +100,7 @@ export function DashboardPage() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-xs font-medium uppercase tracking-[0.16em] text-nebula-muted">Bridge Status</p>
-                    <p className="mt-3 text-2xl font-semibold text-nebula-text">{bridgeHealth?.ok ? "Online" : settings.connectionMode === "mock" ? "Mock" : "Offline"}</p>
+                    <p className="mt-3 text-2xl font-semibold text-nebula-text">{bridgeHealth?.ok ? "Online" : "Offline"}</p>
                     <p className="mt-1 text-xs text-slate-400">{bridgeInfo?.gateway ?? bridgeError ?? settings.bridgeHttpUrl}</p>
                   </div>
                   <span className="grid h-10 w-10 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
@@ -109,7 +109,7 @@ export function DashboardPage() {
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Badge tone={settings.connectionMode === "real" ? "cyan" : "slate"}>
-                    Mode: {settings.connectionMode === "real" ? "Real" : "Mock"}
+                    Mode: {settings.connectionMode === "real" ? "Real" : "Example"}
                   </Badge>
                   <Badge tone={gatewayStatus.state === "connected" ? "emerald" : "amber"}>
                     TCP: {gatewayStatus.state}

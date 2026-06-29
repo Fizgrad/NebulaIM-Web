@@ -46,7 +46,7 @@ const defaults = {
 function defaultConnectionMode(): ConnectionMode {
   const configured = import.meta.env.VITE_CONNECTION_MODE;
   if (configured === "mock" || configured === "real") return configured;
-  return import.meta.env.PROD ? "real" : "mock";
+  return "real";
 }
 
 function defaultBridgeHttpUrl() {
@@ -78,10 +78,10 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "nebulaim-settings",
-      version: 3,
+      version: 4,
       migrate: (persistedState, version) => {
         const state = persistedState as Partial<SettingsState>;
-        if (version < 3 && import.meta.env.PROD) {
+        if (version < 4) {
           return {
             ...state,
             connectionMode: defaults.connectionMode,

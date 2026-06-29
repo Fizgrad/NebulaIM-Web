@@ -22,7 +22,7 @@ export function ConnectionStatus({ status, compact = false }: ConnectionStatusPr
     >
       <span className="inline-flex items-center gap-1.5">
         <Radio className={cn("h-3.5 w-3.5", connected ? "text-emerald-300" : warning ? "text-amber-300" : "text-red-300")} />
-        <span>{status.mode === "real" ? "Real Bridge" : "Mock Mode"}</span>
+        <span>{status.mode === "real" ? "Real Bridge" : "Example Mode"}</span>
         <span>{connected ? "Connected" : status.state === "reconnecting" ? "Reconnecting" : "Disconnected"}</span>
       </span>
       <span className="inline-flex items-center gap-1.5">

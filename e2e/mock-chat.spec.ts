@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("mock mode login and send message", async ({ page }) => {
+test("example mode login and send message", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Launch Web Client" }).click();
 
@@ -11,9 +11,9 @@ test("mock mode login and send message", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Alice/ })).toBeVisible();
 
   const editor = page.getByPlaceholder("Type a message...");
-  await editor.fill("E2E mock message");
+  await editor.fill("E2E example message");
   await page.getByRole("button", { name: /send message/i }).click();
 
-  await expect(page.locator("div").filter({ hasText: /^E2E mock message$/ }).last()).toBeVisible();
+  await expect(page.locator("div").filter({ hasText: /^E2E example message$/ }).last()).toBeVisible();
   await expect(page.locator("span").filter({ hasText: /^(sent|delivered|read|failed)$/ }).last()).toBeVisible();
 });
