@@ -28,10 +28,12 @@ type SettingsState = {
   resetSettings: () => void;
 };
 
+const connectionModeDefault = defaultConnectionMode();
+
 const defaults = {
   theme: "dark" as ThemeMode,
-  mockMode: true,
-  connectionMode: "mock" as ConnectionMode,
+  mockMode: connectionModeDefault === "mock",
+  connectionMode: connectionModeDefault,
   gatewayUrl: "tcp://localhost:9000",
   websocketUrl: import.meta.env.VITE_BRIDGE_WS_URL ?? defaultBridgeWsUrl(),
   bridgeWsUrl: import.meta.env.VITE_BRIDGE_WS_URL ?? defaultBridgeWsUrl(),
@@ -40,6 +42,12 @@ const defaults = {
   heartbeatIntervalMs: 15000,
   randomFailureEnabled: true
 };
+
+function defaultConnectionMode(): ConnectionMode {
+  const configured = import.meta.env.VITE_CONNECTION_MODE;
+  if (configured === "mock" || configured === "real") return configured;
+  return import.meta.env.PROD ? "real" : "mock";
+}
 
 function defaultBridgeHttpUrl() {
   if (typeof window === "undefined") return "http://localhost:8080";
@@ -69,7 +77,22 @@ export const useSettingsStore = create<SettingsState>()(
       resetSettings: () => set(defaults)
     }),
     {
-      name: "nebulaim-settings"
+      name: "nebulaim-settings",
+      version: 3,
+      migrate: (persistedState, version) => {
+        const state = persistedState as Partial<SettingsState>;
+        if (version < 3 && import.meta.env.PROD) {
+          return {
+            ...state,
+            connectionMode: defaults.connectionMode,
+            mockMode: defaults.mockMode,
+            bridgeWsUrl: state.bridgeWsUrl ?? defaults.bridgeWsUrl,
+            bridgeHttpUrl: state.bridgeHttpUrl ?? defaults.bridgeHttpUrl,
+            websocketUrl: state.websocketUrl ?? defaults.websocketUrl
+          };
+        }
+        return state;
+      }
     }
   )
 );
