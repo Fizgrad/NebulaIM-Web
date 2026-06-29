@@ -1,6 +1,7 @@
 import axios from "axios";
 import type { BridgeHealth, BridgeInfo } from "../types/bridge";
 import { ApiError, httpClient, requestWithRetry } from "./client";
+import type { User } from "../types/user";
 
 type BridgeErrorResponse = {
   ok?: boolean;
@@ -22,6 +23,19 @@ type RefreshBridgeResponse = {
   userId: string;
   token: string;
   expireAt: number | string;
+};
+
+type BridgeUserInfo = {
+  userId: string;
+  username: string;
+  nickname: string;
+  avatar?: string;
+  createdAt?: number | string;
+};
+
+type GetBridgeUserResponse = {
+  ok: boolean;
+  user: BridgeUserInfo;
 };
 
 export async function getBridgeHealth(baseUrl: string) {
@@ -67,6 +81,26 @@ export async function registerBridgeUser(baseUrl: string, username: string, pass
       { retries: 1 }
     )
   );
+}
+
+export async function getBridgeUserInfo(baseUrl: string, userId: string): Promise<User> {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(() => httpClient.get<GetBridgeUserResponse>(`${baseUrl.replace(/\/$/, "")}/api/auth/users/${userId}`), {
+      retries: 1
+    })
+  );
+  const user = response.user;
+  return {
+    id: user.userId,
+    username: user.username,
+    nickname: user.nickname || user.username || `User ${user.userId}`,
+    avatar: user.avatar || undefined,
+    avatarColor: "from-cyan-500 to-blue-500",
+    status: "online",
+    registeredAt: Number(user.createdAt ?? Date.now()),
+    gateway: "UserService",
+    connectionId: `user-${user.userId}`
+  };
 }
 
 async function bridgeRequest<T>(operation: () => Promise<{ data: T }>) {

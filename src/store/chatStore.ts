@@ -12,6 +12,7 @@ import { simulateDelivery } from "../services/messageService";
 import { getGatewayClient } from "../services/gatewayClient";
 import { useSettingsStore } from "./settingsStore";
 import { clientLogger } from "../services/clientLogger";
+import { getBridgeUserInfo } from "../api/bridgeApi";
 
 type MessagesByConversationId = Record<string, Message[]>;
 
@@ -27,6 +28,7 @@ type ChatState = {
   markConversationRead: (conversationId: string) => void;
   updateMessageStatus: (conversationId: string, messageId: string, status: MessageStatus) => void;
   openConversationForUser: (user: User) => string;
+  openDirectConversation: (userId: string) => Promise<string>;
   openConversationForGroup: (group: Group) => string;
   setGatewayStatus: (status: GatewayStatus) => void;
   startGatewaySession: () => Promise<void>;
@@ -47,6 +49,15 @@ function sortConversations(conversations: Conversation[]) {
 
 function isNumericId(value?: string) {
   return Boolean(value && /^\d+$/.test(value));
+}
+
+function directConversationId(userId: string) {
+  return `direct-${userId}`;
+}
+
+function conversationIdForIncoming(message: Message) {
+  if (message.groupId) return `group-${message.groupId}`;
+  return directConversationId(message.fromUserId);
 }
 
 async function deliverMessage(conversation: Conversation, message: Message, updateStatus: (status: MessageStatus) => void) {
@@ -168,24 +179,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   receiveMessage: (message) => {
     set((state) => {
-      const isActive = state.activeConversationId === message.conversationId;
+      const conversationId = message.conversationId || conversationIdForIncoming(message);
+      const normalizedMessage = { ...message, conversationId };
+      const existingConversation = state.conversations.find((conversation) => conversation.id === conversationId);
+      const isActive = state.activeConversationId === conversationId;
+      let conversations: Conversation[];
+      if (existingConversation) {
+        conversations = state.conversations.map((conversation) =>
+          conversation.id === conversationId
+            ? {
+                ...conversation,
+                lastMessage: message.content,
+                lastMessageAt: message.createdAt,
+                unreadCount: isActive ? 0 : conversation.unreadCount + 1
+              }
+            : conversation
+        );
+      } else {
+        const incomingConversation: Conversation = {
+          id: conversationId,
+          type: message.groupId ? "group" : "single",
+          title: message.groupId ? `Group ${message.groupId}` : `User ${message.fromUserId}`,
+          online: true,
+          lastMessage: message.content,
+          lastMessageAt: message.createdAt,
+          unreadCount: isActive ? 0 : 1,
+          targetUserId: message.groupId ? undefined : message.fromUserId,
+          groupId: message.groupId
+        };
+        conversations = [incomingConversation, ...state.conversations];
+      }
       return {
         messagesByConversationId: {
           ...state.messagesByConversationId,
-          [message.conversationId]: [...(state.messagesByConversationId[message.conversationId] ?? []), message]
+          [conversationId]: [...(state.messagesByConversationId[conversationId] ?? []), normalizedMessage]
         },
-        conversations: sortConversations(
-          state.conversations.map((conversation) =>
-            conversation.id === message.conversationId
-              ? {
-                  ...conversation,
-                  lastMessage: message.content,
-                  lastMessageAt: message.createdAt,
-                  unreadCount: isActive ? 0 : conversation.unreadCount + 1
-                }
-              : conversation
-          )
-        )
+        conversations: sortConversations(conversations)
       };
     });
   },
@@ -214,7 +243,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     const conversation: Conversation = {
-      id: createId("c"),
+      id: isNumericId(user.id) ? directConversationId(user.id) : createId("c"),
       type: "single",
       title: user.nickname,
       online: user.status === "online",
@@ -226,6 +255,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({ conversations: [conversation, ...state.conversations] }));
     get().setActiveConversationId(conversation.id);
     return conversation.id;
+  },
+  openDirectConversation: async (userId) => {
+    const normalizedUserId = userId.trim();
+    if (!isNumericId(normalizedUserId)) {
+      throw new Error("User ID must be numeric.");
+    }
+
+    const settings = useSettingsStore.getState();
+    const fallbackUser: User = {
+      id: normalizedUserId,
+      username: `user-${normalizedUserId}`,
+      nickname: `User ${normalizedUserId}`,
+      avatarColor: "from-cyan-500 to-blue-500",
+      status: "online",
+      registeredAt: Date.now(),
+      gateway: settings.connectionMode === "real" ? "UserService" : "Mock",
+      connectionId: `user-${normalizedUserId}`
+    };
+
+    const user =
+      settings.connectionMode === "real"
+        ? await getBridgeUserInfo(settings.bridgeHttpUrl, normalizedUserId)
+        : fallbackUser;
+    return get().openConversationForUser(user);
   },
   openConversationForGroup: (group) => {
     const existing = get().conversations.find((conversation) => conversation.groupId === group.id);

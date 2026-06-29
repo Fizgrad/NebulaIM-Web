@@ -5,14 +5,10 @@ import { useChatStore } from "../store/chatStore";
 
 export function ChatPage() {
   const startGatewaySession = useChatStore((state) => state.startGatewaySession);
-  const stopGatewaySession = useChatStore((state) => state.stopGatewaySession);
 
   useEffect(() => {
     void startGatewaySession();
-    return () => {
-      stopGatewaySession();
-    };
-  }, [startGatewaySession, stopGatewaySession]);
+  }, [startGatewaySession]);
 
   return (
     <div className="flex h-screen min-w-0">

@@ -26,6 +26,19 @@ type RefreshTokenResponse = {
   expireAt: string | number;
 };
 
+type UserInfo = {
+  userId: string;
+  username: string;
+  nickname: string;
+  avatar: string;
+  createdAt: string | number;
+};
+
+type GetUserInfoResponse = {
+  response: CommonResponse;
+  user?: UserInfo;
+};
+
 type UserGrpcClient = grpc.Client & {
   Register: (
     request: Record<string, unknown>,
@@ -36,6 +49,11 @@ type UserGrpcClient = grpc.Client & {
     request: Record<string, unknown>,
     options: grpc.CallOptions,
     callback: (error: grpc.ServiceError | null, response: RefreshTokenResponse) => void
+  ) => void;
+  GetUserInfo: (
+    request: Record<string, unknown>,
+    options: grpc.CallOptions,
+    callback: (error: grpc.ServiceError | null, response: GetUserInfoResponse) => void
   ) => void;
 };
 
@@ -52,10 +70,59 @@ const refreshSchema = z.object({
   deviceId: z.string().trim().optional().default("web")
 });
 
+const userIdSchema = z.string().regex(/^\d+$/, "User ID must be numeric.");
+
 let cachedClient: UserGrpcClient | null = null;
 
 export function createAuthRouter(): Router {
   const router = express.Router();
+
+  router.get("/users/:userId", async (req, res) => {
+    const parsed = userIdSchema.safeParse(req.params.userId);
+    if (!parsed.success) {
+      res.status(400).json({
+        ok: false,
+        error: {
+          code: "INVALID_USER_ID",
+          message: parsed.error.issues[0]?.message ?? "Invalid user ID."
+        }
+      });
+      return;
+    }
+
+    const requestId = req.header("x-request-id") ?? createId("user_info_req");
+    try {
+      const response = await invokeGetUserInfo({
+        requestId,
+        userId: Number(parsed.data)
+      });
+
+      if (response.response.code !== 0 || !response.user) {
+        res.status(statusForUserCode(response.response.code)).json({
+          ok: false,
+          error: {
+            code: userCodeToString(response.response.code),
+            message: response.response.message || "User not found."
+          }
+        });
+        return;
+      }
+
+      res.json({
+        ok: true,
+        user: response.user
+      });
+    } catch (error) {
+      logger.warn("UserService.GetUserInfo failed", { detail: error });
+      res.status(502).json({
+        ok: false,
+        error: {
+          code: "USER_SERVICE_UNAVAILABLE",
+          message: error instanceof Error ? error.message : "UserService.GetUserInfo failed."
+        }
+      });
+    }
+  });
 
   router.post("/register", async (req, res) => {
     const parsed = registerSchema.safeParse(req.body);
@@ -181,6 +248,15 @@ function invokeRefreshToken(request: Record<string, unknown>) {
   });
 }
 
+function invokeGetUserInfo(request: Record<string, unknown>) {
+  return new Promise<GetUserInfoResponse>((resolve, reject) => {
+    getUserClient().GetUserInfo(request, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
+      if (error) reject(error);
+      else resolve(response);
+    });
+  });
+}
+
 function getUserClient(): UserGrpcClient {
   if (cachedClient) return cachedClient;
 
@@ -209,6 +285,7 @@ function getUserClient(): UserGrpcClient {
 
 function statusForUserCode(code: number) {
   if (code === 3003) return 409;
+  if (code === 3002) return 404;
   if ([1001, 3004, 3005, 3006].includes(code)) return 400;
   if ([3001, 3007, 15002].includes(code)) return 401;
   return 502;
@@ -218,6 +295,7 @@ function userCodeToString(code: number) {
   const names: Record<number, string> = {
     1001: "INVALID_ARGUMENT",
     3001: "TOKEN_INVALID",
+    3002: "USER_NOT_FOUND",
     3003: "USER_ALREADY_EXISTS",
     3004: "PASSWORD_TOO_SHORT",
     3005: "USERNAME_EMPTY",
