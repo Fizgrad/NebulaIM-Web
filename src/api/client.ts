@@ -1,6 +1,4 @@
 import axios from "axios";
-import { useSettingsStore } from "../store/settingsStore";
-import { randomInt } from "../utils/id";
 import { createTraceHeaders } from "../utils/trace";
 import { retryWithBackoff, isTransientError, type RetryOptions } from "../utils/retry";
 import { clientLogger } from "../services/clientLogger";
@@ -66,28 +64,6 @@ export function delay(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
-}
-
-export async function mockRequest<T>(
-  factory: () => T | Promise<T>,
-  options: { min?: number; max?: number; randomFailure?: boolean; failRate?: number } = {}
-) {
-  const min = options.min ?? 200;
-  const max = options.max ?? 800;
-  await delay(randomInt(min, max));
-
-  const failureEnabled = useSettingsStore.getState().randomFailureEnabled;
-  if (options.randomFailure && failureEnabled && Math.random() < (options.failRate ?? 0.08)) {
-    throw new ApiError(
-      {
-        code: "MOCK_RANDOM_FAILURE",
-        message: "Mock transport failure. Retry the message or disable random failures in Settings."
-      },
-      503
-    );
-  }
-
-  return factory();
 }
 
 export async function requestWithRetry<T>(operation: () => Promise<T>, options: RetryOptions = {}) {

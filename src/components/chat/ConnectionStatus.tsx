@@ -22,9 +22,7 @@ export function ConnectionStatus({ status, compact = false }: ConnectionStatusPr
     >
       <span className="inline-flex items-center gap-1.5">
         <Radio className={cn("h-3.5 w-3.5", connected ? "text-emerald-300" : warning ? "text-amber-300" : "text-red-300")} />
-        <span>
-          {status.mode === "real" ? (status.transport === "direct" ? "Direct Gateway" : "Real Bridge") : "Example Mode"}
-        </span>
+        <span>Gateway</span>
         <span>{connected ? "Connected" : status.state === "reconnecting" ? "Reconnecting" : "Disconnected"}</span>
       </span>
       <span className="inline-flex items-center gap-1.5">
@@ -38,10 +36,10 @@ export function ConnectionStatus({ status, compact = false }: ConnectionStatusPr
           {formatShortTime(status.lastHeartbeatAt)}
         </span>
       ) : null}
-      {status.bridgeUrl ? (
+      {status.gatewayUrl ? (
         <span className="hidden max-w-[220px] items-center gap-1.5 truncate text-nebula-muted xl:inline-flex">
           <Server className="h-3.5 w-3.5" />
-          <span className="truncate">{status.bridgeUrl}</span>
+          <span className="truncate">{status.gatewayUrl}</span>
         </span>
       ) : null}
     </div>

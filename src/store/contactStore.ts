@@ -1,7 +1,5 @@
 import { create } from "zustand";
 import type { User } from "../types/user";
-import { mockUsers, currentUser } from "../mocks/users";
-import * as relationApi from "../api/relationApi";
 import { addBridgeFriend, deleteBridgeFriend, getBridgeUserInfo, listBridgeFriends } from "../api/bridgeApi";
 import { useAuthStore } from "./authStore";
 import { useSettingsStore } from "./settingsStore";
@@ -15,33 +13,19 @@ type ContactState = {
   deleteFriend: (userId: string) => Promise<void>;
 };
 
-function exampleContacts() {
-  return mockUsers.filter((user) => user.id !== currentUser.id);
-}
-
-function initialContacts() {
-  return useSettingsStore.getState().connectionMode === "mock" ? exampleContacts() : [];
-}
-
 function requireNumericId(value: string | undefined, label: string) {
   if (!value || !/^\d+$/.test(value)) {
-    throw new Error(`${label} must be numeric in Real Bridge mode.`);
+    throw new Error(`${label} must be numeric.`);
   }
   return value;
 }
 
 export const useContactStore = create<ContactState>((set) => ({
-  contacts: initialContacts(),
+  contacts: [],
   isLoading: false,
   error: null,
   loadFriends: async () => {
     const settings = useSettingsStore.getState();
-    if (settings.connectionMode === "mock") {
-      const contacts = await relationApi.listFriends();
-      set({ contacts, error: null });
-      return;
-    }
-
     const userId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
     set({ isLoading: true, error: null });
     try {
@@ -53,13 +37,12 @@ export const useContactStore = create<ContactState>((set) => ({
   },
   addFriend: async (userId) => {
     const settings = useSettingsStore.getState();
-    const friendId = userId.trim();
+    const friendId = requireNumericId(userId.trim(), "Friend user_id");
+    const currentUserId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
     set({ isLoading: true, error: null });
     try {
-      const user =
-        settings.connectionMode === "real"
-          ? await addRealFriend(settings.bridgeHttpUrl, friendId)
-          : await relationApi.addFriend(friendId);
+      await addBridgeFriend(settings.bridgeHttpUrl, currentUserId, friendId);
+      const user = await getBridgeUserInfo(settings.bridgeHttpUrl, friendId);
       set((state) => ({
         isLoading: false,
         error: null,
@@ -72,15 +55,11 @@ export const useContactStore = create<ContactState>((set) => ({
   },
   deleteFriend: async (userId) => {
     const settings = useSettingsStore.getState();
+    const currentUserId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
+    const friendId = requireNumericId(userId, "Friend user_id");
     set({ isLoading: true, error: null });
     try {
-      if (settings.connectionMode === "real") {
-        const currentUserId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
-        const friendId = requireNumericId(userId, "Friend user_id");
-        await deleteBridgeFriend(settings.bridgeHttpUrl, currentUserId, friendId);
-      } else {
-        await relationApi.deleteFriend(userId);
-      }
+      await deleteBridgeFriend(settings.bridgeHttpUrl, currentUserId, friendId);
       set((state) => ({
         isLoading: false,
         error: null,
@@ -92,10 +71,3 @@ export const useContactStore = create<ContactState>((set) => ({
     }
   }
 }));
-
-async function addRealFriend(baseUrl: string, friendId: string) {
-  const currentUserId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
-  const numericFriendId = requireNumericId(friendId, "Friend user_id");
-  await addBridgeFriend(baseUrl, currentUserId, numericFriendId);
-  return getBridgeUserInfo(baseUrl, numericFriendId);
-}

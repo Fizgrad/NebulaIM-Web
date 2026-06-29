@@ -4,11 +4,8 @@ import type { Group } from "../types/group";
 import type { Message, MessageStatus } from "../types/message";
 import type { User } from "../types/user";
 import type { GatewayStatus } from "../services/gatewayClient";
-import { mockConversations } from "../mocks/conversations";
-import { mockMessages } from "../mocks/messages";
 import { useAuthStore } from "./authStore";
 import { createId } from "../utils/id";
-import { simulateDelivery } from "../services/messageService";
 import { getGatewayClient } from "../services/gatewayClient";
 import { useSettingsStore } from "./settingsStore";
 import { clientLogger } from "../services/clientLogger";
@@ -37,35 +34,8 @@ type ChatState = {
   clearLocalChat: () => void;
 };
 
-function groupMessages(messages: Message[]) {
-  return messages.reduce<MessagesByConversationId>((acc, message) => {
-    acc[message.conversationId] = [...(acc[message.conversationId] ?? []), message];
-    return acc;
-  }, {});
-}
-
 function sortConversations(conversations: Conversation[]) {
   return [...conversations].sort((a, b) => b.lastMessageAt - a.lastMessageAt);
-}
-
-function exampleConversations() {
-  return sortConversations(mockConversations.map((conversation) => ({ ...conversation })));
-}
-
-function exampleMessages() {
-  return groupMessages(mockMessages.map((message) => ({ ...message })));
-}
-
-function initialConversations() {
-  return useSettingsStore.getState().connectionMode === "mock" ? exampleConversations() : [];
-}
-
-function initialActiveConversationId() {
-  return useSettingsStore.getState().connectionMode === "mock" ? "c-alice" : null;
-}
-
-function initialMessages() {
-  return useSettingsStore.getState().connectionMode === "mock" ? exampleMessages() : {};
 }
 
 function isNumericId(value?: string): value is string {
@@ -104,19 +74,18 @@ function mapBackendConversation(item: BackendConversationInfo): Conversation {
 }
 
 async function deliverMessage(conversation: Conversation, message: Message, updateStatus: (status: MessageStatus) => void) {
-  const settings = useSettingsStore.getState();
   const gateway = getGatewayClient();
-  const userId = useAuthStore.getState().user?.id ?? "u-current";
+  const userId = useAuthStore.getState().user?.id;
   const sequenceId = Date.now() % 1000000;
   let serverMessageId = message.id;
 
-  if (settings.connectionMode === "real" && !isNumericId(userId)) {
-    throw new Error("Real Bridge mode requires a numeric backend user_id from Gateway login.");
+  if (!isNumericId(userId)) {
+    throw new Error("Current user_id must be numeric.");
   }
 
   if (conversation.type === "group" && conversation.groupId) {
-    if (settings.connectionMode === "real" && !isNumericId(conversation.groupId)) {
-      throw new Error("Real Bridge mode requires numeric backend group_id.");
+    if (!isNumericId(conversation.groupId)) {
+      throw new Error("Group ID must be numeric.");
     }
     const result = await gateway.sendGroupMessage({
       conversationId: conversation.id,
@@ -128,13 +97,13 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
     });
     serverMessageId = result.messageId || message.id;
   } else {
-    if (settings.connectionMode === "real" && !isNumericId(conversation.targetUserId)) {
-      throw new Error("Real Bridge mode requires numeric backend to_user_id.");
+    if (!isNumericId(conversation.targetUserId)) {
+      throw new Error("Recipient user_id must be numeric.");
     }
     const result = await gateway.sendSingleMessage({
       conversationId: conversation.id,
       fromUserId: userId,
-      toUserId: conversation.targetUserId ?? "",
+      toUserId: conversation.targetUserId,
       content: message.content,
       contentType: "text",
       clientSequenceId: sequenceId
@@ -148,23 +117,17 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
   } catch (error) {
     clientLogger.warn("Message ACK failed after send succeeded", error);
   }
-  if (settings.connectionMode === "mock") {
-    const delivered = await simulateDelivery(message.id);
-    updateStatus(delivered.status);
-  } else {
-    updateStatus("delivered");
-  }
+  updateStatus("delivered");
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
-  conversations: initialConversations(),
-  activeConversationId: initialActiveConversationId(),
-  messagesByConversationId: initialMessages(),
+  conversations: [],
+  activeConversationId: null,
+  messagesByConversationId: {},
   gatewayStatus: {
     state: "disconnected",
     heartbeatOk: false,
-    latency: 0,
-    mode: useSettingsStore.getState().connectionMode
+    latency: 0
   },
   setActiveConversationId: (activeConversationId) => {
     set({ activeConversationId });
@@ -172,11 +135,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   loadConversations: async () => {
     const settings = useSettingsStore.getState();
-    if (settings.connectionMode !== "real") return;
     const userId = useAuthStore.getState().user?.id;
     if (!isNumericId(userId)) return;
-    const numericUserId = userId;
-    const conversations = await listBridgeConversations(settings.bridgeHttpUrl, numericUserId);
+    const conversations = await listBridgeConversations(settings.bridgeHttpUrl, userId);
     set((state) => {
       const mapped = sortConversations(conversations.map(mapBackendConversation));
       const activeStillExists = mapped.some((conversation) => conversation.id === state.activeConversationId);
@@ -193,7 +154,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const conversation = get().conversations.find((item) => item.id === conversationId);
     if (!conversation) return;
 
-    const userId = useAuthStore.getState().user?.id ?? "u-current";
+    const userId = useAuthStore.getState().user?.id;
+    if (!isNumericId(userId)) return;
+
     const message: Message = {
       id: createId("local"),
       conversationId,
@@ -285,9 +248,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const conversation = get().conversations.find((item) => item.id === conversationId);
     const settings = useSettingsStore.getState();
     const userId = useAuthStore.getState().user?.id;
-    if (settings.connectionMode === "real" && conversation?.backendConversationId && isNumericId(userId)) {
-      const numericUserId = userId;
-      void markBridgeConversationRead(settings.bridgeHttpUrl, numericUserId, conversation.backendConversationId).catch((error) => {
+    if (conversation?.backendConversationId && isNumericId(userId)) {
+      void markBridgeConversationRead(settings.bridgeHttpUrl, userId, conversation.backendConversationId).catch((error) => {
         clientLogger.warn("Mark conversation read failed", error);
       });
     }
@@ -334,22 +296,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error("User ID must be numeric.");
     }
 
-    const settings = useSettingsStore.getState();
-    const fallbackUser: User = {
-      id: normalizedUserId,
-      username: `user-${normalizedUserId}`,
-      nickname: `User ${normalizedUserId}`,
-      avatarColor: "from-cyan-500 to-blue-500",
-      status: "online",
-      registeredAt: Date.now(),
-      gateway: settings.connectionMode === "real" ? "UserService" : "Example",
-      connectionId: `user-${normalizedUserId}`
-    };
-
-    const user =
-      settings.connectionMode === "real"
-        ? await getBridgeUserInfo(settings.bridgeHttpUrl, normalizedUserId)
-        : fallbackUser;
+    const user = await getBridgeUserInfo(useSettingsStore.getState().bridgeHttpUrl, normalizedUserId);
     return get().openConversationForUser(user);
   },
   openConversationForGroup: (group) => {
@@ -379,12 +326,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     gateway.onMessage(get().receiveMessage);
     gateway.onStatusChange(get().setGatewayStatus);
     await gateway.connect();
-    if (useSettingsStore.getState().connectionMode === "real") {
-      try {
-        await get().loadConversations();
-      } catch (error) {
-        clientLogger.warn("Load conversations failed", error);
-      }
+    try {
+      await get().loadConversations();
+    } catch (error) {
+      clientLogger.warn("Load conversations failed", error);
     }
   },
   stopGatewaySession: () => {
@@ -392,8 +337,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   clearLocalChat: () =>
     set({
-      conversations: initialConversations(),
-      activeConversationId: initialActiveConversationId(),
-      messagesByConversationId: initialMessages()
+      conversations: [],
+      activeConversationId: null,
+      messagesByConversationId: {}
     })
 }));

@@ -1,8 +1,5 @@
 import type { Message, SendMessagePayload } from "./message";
 
-export type ConnectionMode = "mock" | "real";
-export type GatewayTransport = "direct" | "bridge";
-
 export type GatewayConnectionState = "connected" | "disconnected" | "reconnecting";
 
 export type GatewayStatus = {
@@ -11,9 +8,7 @@ export type GatewayStatus = {
   latency: number;
   connectedAt?: number;
   lastHeartbeatAt?: number;
-  mode: ConnectionMode;
-  transport?: GatewayTransport;
-  bridgeUrl?: string;
+  gatewayUrl?: string;
   error?: string;
 };
 

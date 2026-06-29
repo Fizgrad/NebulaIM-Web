@@ -28,8 +28,7 @@ export function createHttpServer(config: BridgeConfig): http.Server {
       user: `${config.userServiceHost}:${config.userServicePort}`,
       relation: `${config.relationServiceHost}:${config.relationServicePort}`,
       conversation: `${config.conversationServiceHost}:${config.conversationServicePort}`,
-      admin: `${config.adminServiceHost}:${config.adminServicePort}`,
-      websocket: "/ws"
+      admin: `${config.adminServiceHost}:${config.adminServicePort}`
     });
   });
 
@@ -41,7 +40,7 @@ export function createHttpServer(config: BridgeConfig): http.Server {
   if (config.webStaticDir && fs.existsSync(path.join(config.webStaticDir, "index.html"))) {
     app.use(express.static(config.webStaticDir, { index: false }));
     app.use((req, res, next) => {
-      if (req.method !== "GET" || req.path.startsWith("/api/") || req.path === "/ws") {
+      if (req.method !== "GET" || req.path.startsWith("/api/")) {
         next();
         return;
       }

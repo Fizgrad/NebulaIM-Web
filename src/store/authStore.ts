@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { User } from "../types/user";
-import * as authApi from "../api/authApi";
 import { refreshBridgeToken } from "../api/bridgeApi";
 import { getGatewayClient, resetGatewayClient } from "../services/gatewayClient";
 import { useSettingsStore } from "./settingsStore";
@@ -38,37 +37,23 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           const settings = useSettingsStore.getState();
-          if (settings.connectionMode === "real") {
-            const gateway = getGatewayClient();
-            await gateway.connect();
-            const result = await gateway.login(username, password);
-            const user: User = {
-              id: result.userId,
-              username: result.username ?? username,
-              nickname: result.nickname ?? username,
-              avatarColor: "from-violet-500 to-cyan-400",
-              status: "online",
-              registeredAt: Date.now(),
-              gateway: settings.gatewayTransport === "direct" ? settings.directGatewayWsUrl : settings.bridgeWsUrl,
-              connectionId: `${settings.gatewayTransport}-${result.userId}`
-            };
-            set({
-              user,
-              token: result.token,
-              tokenExpireAt: normalizeExpireAt(result.expireAt),
-              lastRefreshAt: Date.now(),
-              isAuthenticated: true,
-              isLoading: false,
-              error: null
-            });
-            return;
-          }
-
-          const response = await authApi.login(username, password);
+          const gateway = getGatewayClient();
+          await gateway.connect();
+          const result = await gateway.login(username, password);
+          const user: User = {
+            id: result.userId,
+            username: result.username ?? username,
+            nickname: result.nickname ?? username,
+            avatarColor: "from-violet-500 to-cyan-400",
+            status: "online",
+            registeredAt: Date.now(),
+            gateway: settings.directGatewayWsUrl,
+            connectionId: `gateway-${result.userId}`
+          };
           set({
-            user: response.user,
-            token: response.token,
-            tokenExpireAt: response.expireAt,
+            user,
+            token: result.token,
+            tokenExpireAt: normalizeExpireAt(result.expireAt),
             lastRefreshAt: Date.now(),
             isAuthenticated: true,
             isLoading: false,
@@ -85,13 +70,8 @@ export const useAuthStore = create<AuthState>()(
       register: async (username, password, nickname) => {
         set({ isLoading: true, error: null });
         try {
-          const settings = useSettingsStore.getState();
-          if (settings.connectionMode === "real") {
-            const gateway = getGatewayClient();
-            await gateway.register(username, password, nickname);
-          } else {
-            await authApi.register(username, password, nickname);
-          }
+          const gateway = getGatewayClient();
+          await gateway.register(username, password, nickname);
           set({ isLoading: false, error: null });
         } catch (error) {
           set({
@@ -106,10 +86,7 @@ export const useAuthStore = create<AuthState>()(
         if (!token) return false;
         const settings = useSettingsStore.getState();
         try {
-          const response =
-            settings.connectionMode === "real"
-              ? await refreshBridgeToken(settings.bridgeHttpUrl, token)
-              : await authApi.refreshToken(token);
+          const response = await refreshBridgeToken(settings.bridgeHttpUrl, token);
           set({
             token: response.token,
             tokenExpireAt: normalizeExpireAt(response.expireAt),

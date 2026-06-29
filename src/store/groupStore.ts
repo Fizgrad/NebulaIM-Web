@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import type { Group } from "../types/group";
 import type { User } from "../types/user";
-import { mockGroups } from "../mocks/groups";
-import * as relationApi from "../api/relationApi";
 import {
   createBridgeGroup,
   joinBridgeGroup,
@@ -22,30 +20,19 @@ type GroupState = {
   leaveGroup: (groupId: string) => Promise<void>;
 };
 
-function exampleGroups() {
-  return mockGroups.map((group) => ({ ...group }));
-}
-
-function initialGroups() {
-  return useSettingsStore.getState().connectionMode === "mock" ? exampleGroups() : [];
-}
-
 function requireNumericId(value: string | undefined, label: string) {
   if (!value || !/^\d+$/.test(value)) {
-    throw new Error(`${label} must be numeric in Real Bridge mode.`);
+    throw new Error(`${label} must be numeric.`);
   }
   return value;
 }
 
 export const useGroupStore = create<GroupState>((set) => ({
-  groups: initialGroups(),
+  groups: [],
   isLoading: false,
   error: null,
   loadGroupMembers: async (groupId) => {
     const settings = useSettingsStore.getState();
-    if (settings.connectionMode === "mock") {
-      return relationApi.listGroupMembers(groupId);
-    }
     set({ isLoading: true, error: null });
     try {
       const numericGroupId = requireNumericId(groupId, "Group ID");
@@ -67,10 +54,7 @@ export const useGroupStore = create<GroupState>((set) => ({
     const settings = useSettingsStore.getState();
     set({ isLoading: true, error: null });
     try {
-      const group =
-        settings.connectionMode === "real"
-          ? await createRealGroup(settings.bridgeHttpUrl, name)
-          : await relationApi.createGroup(name);
+      const group = await createRealGroup(settings.bridgeHttpUrl, name);
       set((state) => ({ groups: [group, ...state.groups], isLoading: false, error: null }));
     } catch (error) {
       set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to create group." });
@@ -81,10 +65,7 @@ export const useGroupStore = create<GroupState>((set) => ({
     const settings = useSettingsStore.getState();
     set({ isLoading: true, error: null });
     try {
-      const group =
-        settings.connectionMode === "real"
-          ? await joinRealGroup(settings.bridgeHttpUrl, groupId)
-          : await relationApi.joinGroup(groupId);
+      const group = await joinRealGroup(settings.bridgeHttpUrl, groupId);
       set((state) => ({
         groups: state.groups.some((item) => item.id === group.id)
           ? state.groups.map((item) => (item.id === group.id ? { ...group } : item))
@@ -101,13 +82,9 @@ export const useGroupStore = create<GroupState>((set) => ({
     const settings = useSettingsStore.getState();
     set({ isLoading: true, error: null });
     try {
-      if (settings.connectionMode === "real") {
-        const userId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
-        const numericGroupId = requireNumericId(groupId, "Group ID");
-        await leaveBridgeGroup(settings.bridgeHttpUrl, userId, numericGroupId);
-      } else {
-        await relationApi.leaveGroup(groupId);
-      }
+      const userId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
+      const numericGroupId = requireNumericId(groupId, "Group ID");
+      await leaveBridgeGroup(settings.bridgeHttpUrl, userId, numericGroupId);
       set((state) => ({
         groups: state.groups.map((item) =>
           item.id === groupId ? { ...item, memberCount: Math.max(0, item.memberCount - 1) } : item

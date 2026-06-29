@@ -28,10 +28,10 @@ export class BridgeError extends Error {
   }
 }
 
-export function toBridgeError(error: unknown, fallback: BridgeErrorPayload): BridgeError {
+export function toBridgeError(error: unknown, defaultPayload: BridgeErrorPayload): BridgeError {
   if (error instanceof BridgeError) return error;
   if (error instanceof Error) {
-    return new BridgeError({ ...fallback, message: error.message || fallback.message, detail: error });
+    return new BridgeError({ ...defaultPayload, message: error.message || defaultPayload.message, detail: error });
   }
-  return new BridgeError(fallback);
+  return new BridgeError(defaultPayload);
 }

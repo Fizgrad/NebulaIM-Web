@@ -7,9 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.json",
-    "lint": "eslint src --ext .ts",
-    "smoke": "tsx scripts/smoke-test.ts",
-    "smoke:real": "tsx scripts/real-e2e-test.ts"
+    "lint": "eslint src --ext .ts"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.4",
@@ -17,15 +15,12 @@
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",
-    "protobufjs": "latest",
-    "ws": "latest",
     "zod": "latest"
   },
   "devDependencies": {
     "@types/cors": "latest",
     "@types/express": "latest",
     "@types/node": "latest",
-    "@types/ws": "latest",
     "tsx": "latest",
     "typescript": "latest"
   }

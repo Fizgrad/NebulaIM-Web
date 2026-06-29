@@ -342,9 +342,7 @@ export class DirectGatewayClient implements GatewayClient {
         latency: this.latency,
         connectedAt: this.connectedAt,
         lastHeartbeatAt: Date.now(),
-        mode: "real",
-        transport: "direct",
-        bridgeUrl: this.options.wsUrl
+        gatewayUrl: this.options.wsUrl
       });
     }
   }
@@ -516,12 +514,10 @@ export class DirectGatewayClient implements GatewayClient {
     return value;
   }
 
-  private emitStatus(status: Omit<GatewayStatus, "mode" | "transport" | "bridgeUrl">): void {
+  private emitStatus(status: Omit<GatewayStatus, "gatewayUrl">): void {
     const fullStatus: GatewayStatus = {
       ...status,
-      mode: "real",
-      transport: "direct",
-      bridgeUrl: this.options.wsUrl
+      gatewayUrl: this.options.wsUrl
     };
     this.statusHandlers.forEach((handler) => handler(fullStatus));
   }

@@ -1,76 +1,53 @@
 # NebulaIM Web Bridge
 
-NebulaIM Web Bridge is a lightweight Node.js TCP proxy for the NebulaIM browser client.
+NebulaIM Web Bridge is the HTTP service boundary for NebulaIM Web. It serves the built React app and exposes browser-safe HTTP APIs that proxy backend gRPC services.
 
-Browsers cannot open native TCP connections to the C++ Gateway on port `9000`, so the bridge exposes:
-
-- WebSocket JSON protocol at `/ws`
-- HTTP health endpoints at `/health` and `/info`
-- HTTP UserService auth proxy endpoints at `/api/auth/*`
-- HTTP RelationService proxy endpoints at `/api/relation/*`
-- HTTP ConversationService proxy endpoints at `/api/conversations/*`
-- HTTP AdminService proxy endpoints at `/api/admin/*`
-- Native TCP binary Packet protocol to NebulaIM Gateway
+Gateway long-connection traffic does not go through this Bridge. Browser clients connect directly to the C++ Gateway WebSocket endpoint and send NebulaIM binary Packet + Protobuf frames.
 
 ## Architecture
 
 ```text
 Browser Web Client
-  -> WebSocket JSON
-NebulaIM Web Bridge
-  -> TCP PacketHeader + Protobuf body
-NebulaIM Gateway
-  -> gRPC services
-UserService / MessageService / PushService / RelationService
+  -> WebSocket binary frame
+NebulaIM Gateway :9000
+  -> gRPC
+MessageService / PushService / UserService
 
-Browser Admin Console
-  -> HTTP JSON /api/admin/*
-NebulaIM Web Bridge
-  -> gRPC metadata + protobuf
-AdminService
-
-Browser Register / Token Refresh
-  -> HTTP JSON /api/auth/*
-NebulaIM Web Bridge
+Browser Web Client
+  -> HTTP JSON
+NebulaIM Web Bridge :8080
   -> gRPC protobuf
-UserService
-
-Browser Contacts / Groups
-  -> HTTP JSON /api/relation/*
-NebulaIM Web Bridge
-  -> gRPC protobuf
-RelationService
-
-Browser Conversation List
-  -> HTTP JSON /api/conversations/*
-NebulaIM Web Bridge
-  -> gRPC protobuf
-ConversationService
+UserService / RelationService / ConversationService / AdminService
 ```
-
-One browser WebSocket session owns one TCP Gateway connection. Do not share a TCP connection across browser users because Gateway session identity is connection-scoped.
 
 ## Environment
 
 ```env
 BRIDGE_HOST=0.0.0.0
 BRIDGE_PORT=8080
+
 GATEWAY_TCP_HOST=127.0.0.1
 GATEWAY_TCP_PORT=9000
+
 USER_SERVICE_HOST=127.0.0.1
 USER_SERVICE_PORT=50051
+
 RELATION_SERVICE_HOST=127.0.0.1
 RELATION_SERVICE_PORT=50053
+
 CONVERSATION_SERVICE_HOST=127.0.0.1
 CONVERSATION_SERVICE_PORT=50056
+
 ADMIN_SERVICE_HOST=127.0.0.1
 ADMIN_SERVICE_PORT=50057
+
 CORS_ORIGIN=http://localhost:5173
 LOG_LEVEL=info
-HEARTBEAT_INTERVAL_MS=15000
-GATEWAY_REQUEST_TIMEOUT_MS=5000
 PROTO_DIR=../proto
+WEB_STATIC_DIR=
 ```
+
+`WEB_STATIC_DIR` can point to the built frontend directory, for example `/opt/nebulaim-web/web`, so the Bridge process can serve the SPA.
 
 ## Install
 
@@ -93,267 +70,135 @@ npm run build
 npm start
 ```
 
-## Auth HTTP API
+## HTTP Endpoints
 
-The bridge exposes browser-safe HTTP endpoints for UserService operations that are not long-lived Gateway packets:
-
-- `POST /api/auth/register`
-- `POST /api/auth/refresh`
-
-Register request:
-
-```json
-{
-  "username": "alice",
-  "password": "password123",
-  "nickname": "Alice"
-}
+```text
+GET /health
+GET /info
 ```
 
-Register response:
+`/health` returns:
 
 ```json
 {
   "ok": true,
-  "userId": "10001",
-  "username": "alice",
-  "nickname": "Alice"
+  "service": "nebulaim-web-bridge"
 }
 ```
 
-The bridge forwards registration to `nebula.proto.UserService.Register` on `USER_SERVICE_HOST:USER_SERVICE_PORT`. The inspected backend validates empty username, empty password, duplicate username and password length, then returns `RegisterResponse { response, user_id }`.
+`/info` returns the configured backend service addresses.
 
-Refresh request:
+## Auth HTTP API
+
+The Bridge exposes UserService endpoints needed by the browser outside the Gateway long connection:
+
+```text
+GET  /api/auth/users/:userId
+POST /api/auth/refresh
+```
+
+Token refresh request:
 
 ```json
 {
-  "token": "current-token"
+  "token": "current-token",
+  "deviceId": "web"
 }
 ```
 
 ## Relation HTTP API
 
-The bridge exposes browser-safe RelationService endpoints:
+```text
+GET    /api/relation/friends?userId=<id>
+POST   /api/relation/friends
+DELETE /api/relation/friends/:friendId?userId=<id>
+POST   /api/relation/groups
+POST   /api/relation/groups/:groupId/join
+POST   /api/relation/groups/:groupId/leave
+GET    /api/relation/groups/:groupId/members
+```
 
-- `GET /api/relation/friends?userId=<id>`
-- `POST /api/relation/friends` with `{ "userId": "21", "friendId": "20" }`
-- `DELETE /api/relation/friends/:friendId?userId=<id>`
-- `POST /api/relation/groups` with `{ "ownerId": "21", "name": "Backend Infra" }`
-- `POST /api/relation/groups/:groupId/join` with `{ "userId": "21" }`
-- `POST /api/relation/groups/:groupId/leave` with `{ "userId": "21" }`
-- `GET /api/relation/groups/:groupId/members`
-
-The bridge forwards these calls to `nebula.proto.RelationService` on `RELATION_SERVICE_HOST:RELATION_SERVICE_PORT`. IDs must be numeric backend IDs. The default frontend does not load mock friends or mock groups; mock records are only used by `npm run dev:example`.
+The Bridge forwards these calls to `nebula.proto.RelationService` on `RELATION_SERVICE_HOST:RELATION_SERVICE_PORT`. IDs must be numeric backend IDs.
 
 ## Conversation HTTP API
 
-The bridge exposes browser-safe ConversationService endpoints:
+```text
+GET    /api/conversations?userId=<id>&page=1&pageSize=50
+POST   /api/conversations/:conversationId/read
+DELETE /api/conversations/:conversationId
+POST   /api/conversations/:conversationId/pin
+POST   /api/conversations/:conversationId/mute
+```
 
-- `GET /api/conversations?userId=<id>&page=1&pageSize=50`
-- `POST /api/conversations/:conversationId/read` with `{ "userId": "21" }`
-- `DELETE /api/conversations/:conversationId` with `{ "userId": "21" }`
-- `POST /api/conversations/:conversationId/pin` with `{ "userId": "21", "value": true }`
-- `POST /api/conversations/:conversationId/mute` with `{ "userId": "21", "value": true }`
-
-The bridge forwards these calls to `nebula.proto.ConversationService` on `CONVERSATION_SERVICE_HOST:CONVERSATION_SERVICE_PORT`.
+The Bridge forwards these calls to `nebula.proto.ConversationService` on `CONVERSATION_SERVICE_HOST:CONVERSATION_SERVICE_PORT`.
 
 ## Admin HTTP API
 
-The bridge exposes a small browser-safe HTTP proxy for NebulaIM AdminService:
+```text
+GET  /api/admin/health
+GET  /api/admin/system-stats
+GET  /api/admin/outbox-stats
+GET  /api/admin/kafka-lag
+POST /api/admin/cleanup
+```
 
-- `GET /api/admin/health`
-- `GET /api/admin/system-stats`
-- `GET /api/admin/outbox-stats`
-- `GET /api/admin/kafka-lag`
-- `POST /api/admin/cleanup` with `{ "dryRun": true }`
-
-Clients must send the raw AdminService token in:
+Clients send the raw AdminService token in:
 
 ```text
 X-Nebula-Admin-Token: <token>
 ```
 
-The bridge forwards that value to the backend gRPC call as metadata key `x-nebula-admin-token`. The token is not part of the protobuf request body and must not be logged.
-
-The inspected backend config uses scoped tokens in `admin_service.admin_tokens`. Bundled development raw tokens are:
-
-- `nebula-ops-local`: `health`, `stats`, `outbox`
-- `nebula-kafka-local`: `health`, `kafka`
-- `nebula-maint-local`: `health`, `cleanup`
-
-## WebSocket Events
-
-Client to Bridge:
-
-- `auth.login`
-- `connection.heartbeat`
-- `message.send_single`
-- `message.send_group`
-- `message.ack`
-- `message.pull_offline`
-
-Bridge to Client:
-
-- `auth.login_result`
-- `connection.heartbeat_result`
-- `message.send_single_result`
-- `message.send_group_result`
-- `message.ack_result`
-- `message.pull_offline_result`
-- `message.push`
-- `connection.status`
-- `error`
-
-All server events use:
-
-```ts
-type ServerEvent = {
-  id: string;
-  type: string;
-  ok: boolean;
-  timestamp: number;
-  payload?: unknown;
-  error?: { code: number; message: string };
-};
-```
-
-## TCP Packet Protocol
-
-The bridge sends binary packets to the C++ Gateway. It never sends JSON to the TCP Gateway.
-
-Header is fixed 16 bytes, big-endian:
-
-```text
-uint32 magic       0x4E494D42
-uint16 version     1
-uint16 type
-uint32 sequence_id
-uint32 body_length
-```
-
-Body is a Protobuf encoded message. `PacketCodec` handles sticky packets and half packets with an internal receive buffer. Default body limit is 1MB.
-
-## MessageType
-
-`bridge/src/gateway/MessageType.ts` must stay aligned with the C++ backend:
-
-```text
-LOGIN_REQ=1001
-LOGIN_RESP=1002
-REGISTER_REQ=1003
-REGISTER_RESP=1004
-HEARTBEAT_REQ=1101
-HEARTBEAT_RESP=1102
-SEND_SINGLE_MSG_REQ=2001
-SEND_SINGLE_MSG_RESP=2002
-SEND_GROUP_MSG_REQ=2101
-SEND_GROUP_MSG_RESP=2102
-PUSH_MSG=3001
-ACK_REQ=4001
-ACK_RESP=4002
-PULL_OFFLINE_MSG_REQ=5001
-PULL_OFFLINE_MSG_RESP=5002
-ERROR_RESP=9001
-```
-
-If the C++ backend changes MessageType values, update the bridge enum and rebuild.
+The Bridge forwards that value to AdminService as gRPC metadata key `x-nebula-admin-token`. The token is not written to logs.
 
 ## Protobuf
 
-Proto files live in the root `proto/` directory and are loaded once at startup with `protobufjs`.
+The Bridge loads backend service definitions from the root `proto/` directory with `@grpc/proto-loader`.
 
-The root `proto/` files are synchronized from `~/NebulaIM/proto`. Keep them aligned with backend changes.
+Keep these files synchronized with `~/NebulaIM/proto`:
 
-The bridge currently expects these fully qualified names:
+```text
+admin.proto
+common.proto
+conversation.proto
+device.proto
+gateway.proto
+message.proto
+push.proto
+relation.proto
+user.proto
+```
 
-- `nebula.proto.LoginRequest`
-- `nebula.proto.LoginResponse`
-- `nebula.proto.RegisterRequest`
-- `nebula.proto.RegisterResponse`
-- `nebula.proto.SendSingleMessageRequest`
-- `nebula.proto.SendSingleMessageResponse`
-- `nebula.proto.SendGroupMessageRequest`
-- `nebula.proto.SendGroupMessageResponse`
-- `nebula.proto.AckMessageRequest`
-- `nebula.proto.AckMessageResponse`
-- `nebula.proto.PullOfflineMessagesRequest`
-- `nebula.proto.PullOfflineMessagesResponse`
-- `nebula.proto.MessageData`
-- `nebula.proto.CommonResponse`
-- `nebula.proto.AdminService`
-- `nebula.proto.HealthCheckRequest`
-- `nebula.proto.HealthCheckResponse`
-- `nebula.proto.GetSystemStatsRequest`
-- `nebula.proto.GetSystemStatsResponse`
-- `nebula.proto.GetOutboxStatsRequest`
-- `nebula.proto.GetOutboxStatsResponse`
-- `nebula.proto.GetKafkaLagInfoRequest`
-- `nebula.proto.GetKafkaLagInfoResponse`
-- `nebula.proto.RunCleanupRequest`
-- `nebula.proto.RunCleanupResponse`
-- `nebula.proto.RelationService`
-- `nebula.proto.AddFriendRequest`
-- `nebula.proto.DeleteFriendRequest`
-- `nebula.proto.ListFriendsRequest`
-- `nebula.proto.ListFriendsResponse`
-- `nebula.proto.CreateGroupRequest`
-- `nebula.proto.CreateGroupResponse`
-- `nebula.proto.JoinGroupRequest`
-- `nebula.proto.LeaveGroupRequest`
-- `nebula.proto.ListGroupMembersRequest`
-- `nebula.proto.ListGroupMembersResponse`
-- `nebula.proto.ConversationService`
-- `nebula.proto.ListConversationsRequest`
-- `nebula.proto.ListConversationsResponse`
-- `nebula.proto.ConversationMarkReadRequest`
-- `nebula.proto.ConversationDeleteRequest`
-- `nebula.proto.ConversationPinRequest`
-- `nebula.proto.ConversationMuteRequest`
+## Gateway Note
 
-These files must be synchronized with the real NebulaIM backend proto definitions before production use.
-
-The inspected backend returns `HEARTBEAT_RESP` as `nebula.proto.CommonResponse`; the heartbeat request body is empty and is ignored by `GatewayRouter::handleHeartbeat`.
-
-The bridge expects the real backend response shape: nested `CommonResponse response`, numeric uint64 IDs, enum `MessageContentType`, and `PageRequest` for offline message pull.
-
-## Backend WebSocket Note
-
-The inspected `~/NebulaIM` backend also supports WebSocket upgrade directly inside the C++ Gateway. Its contract is:
+The C++ Gateway owns browser long connections:
 
 ```text
 WebSocket Binary Payload = NebulaIM PacketCodec bytes
 ```
 
-The frontend now includes a direct mode that connects to the C++ Gateway WebSocket endpoint and sends binary PacketCodec frames directly. This bridge remains useful for HTTP health/admin/relation/conversation endpoints and as a JSON WebSocket fallback.
+The frontend implements this in:
 
-## Manual Smoke Test
-
-```bash
-cd bridge
-npm run smoke
+```text
+src/services/browserPacketCodec.ts
+src/services/browserProtoRegistry.ts
+src/services/directGatewayClient.ts
 ```
-
-The smoke test connects to `ws://localhost:8080/ws`, sends `auth.login`, `connection.heartbeat`, and `message.pull_offline`, then prints server events.
 
 ## Gateway Integration Checklist
 
 1. Start NebulaIM dependencies.
-2. Start UserService, MessageService, PushService, RelationService, AdminService and Gateway.
-3. Confirm Gateway TCP listens on `127.0.0.1:9000`.
-4. Confirm AdminService listens on `127.0.0.1:50057`.
-5. Start this bridge.
-6. In the frontend Settings page, use Direct Gateway for C++ WebSocket binary mode or Bridge for Node JSON WebSocket fallback.
-7. Login and send a message.
-8. Open `/admin`, enter an AdminService token and call health/outbox/cleanup.
-9. Check Gateway, MessageService, PushService and AdminService logs.
+2. Start UserService, RelationService, ConversationService, MessageService, PushService, AdminService and Gateway.
+3. Confirm Gateway WebSocket listens on `127.0.0.1:9000`.
+4. Confirm Bridge listens on `127.0.0.1:8080`.
+5. Confirm `/health` and `/info` return OK.
+6. Login through the frontend.
+7. Send a direct message to a numeric backend `user_id`.
+8. Open `/admin`, enter an AdminService token and call health/outbox/kafka/cleanup.
 
 ## Common Errors
 
-- `GATEWAY_NOT_CONNECTED`: Gateway TCP port is not reachable.
-- `GATEWAY_TIMEOUT`: Gateway did not respond before `GATEWAY_REQUEST_TIMEOUT_MS`.
-- `GATEWAY_PACKET_ERROR`: packet magic, version or body length is invalid.
-- `PROTO_ENCODE_FAILED`: frontend event payload does not match proto schema.
-- `PROTO_DECODE_FAILED`: Gateway response body does not match proto schema.
-- `AUTH_FAILED`: backend rejected login.
+- `USER_SERVICE_UNAVAILABLE`: UserService is not reachable at `USER_SERVICE_HOST:USER_SERVICE_PORT`.
+- `RELATION_SERVICE_UNAVAILABLE`: RelationService is not reachable.
+- `CONVERSATION_SERVICE_UNAVAILABLE`: ConversationService is not reachable.
 - `ADMIN_TOKEN_REQUIRED`: `/api/admin/*` request did not include `X-Nebula-Admin-Token`.
-- Admin RPC response says `admin permission denied`: token exists but lacks the required scope.
+- `admin permission denied`: token exists but lacks the required scope.
