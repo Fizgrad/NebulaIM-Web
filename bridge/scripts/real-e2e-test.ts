@@ -100,6 +100,7 @@ function createEvent(type: string, payload: Record<string, unknown>): ClientEven
 async function openBridgeSocket() {
   const ws = new WebSocket(bridgeWsUrl);
   const pending = new Map<string, (event: ServerEvent) => void>();
+  let gatewayReady = false;
   let markReady: (() => void) | undefined;
   let markFailed: ((error: Error) => void) | undefined;
 
@@ -109,6 +110,7 @@ async function openBridgeSocket() {
     if (event.type === "connection.status") {
       const payload = event.payload as { gatewayConnected?: boolean } | undefined;
       if (event.ok && payload?.gatewayConnected !== false) {
+        gatewayReady = true;
         markReady?.();
       } else if (!event.ok) {
         markFailed?.(new Error(event.error?.message ?? "Bridge Gateway is not connected."));
@@ -123,6 +125,10 @@ async function openBridgeSocket() {
   });
 
   await new Promise<void>((resolve, reject) => {
+    if (gatewayReady) {
+      resolve();
+      return;
+    }
     const timer = setTimeout(() => reject(new Error("Timeout waiting for Bridge Gateway connection.")), 10000);
     markReady = () => {
       clearTimeout(timer);
