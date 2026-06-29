@@ -1,0 +1,125 @@
+import type { Router } from "express";
+import express from "express";
+import * as grpc from "@grpc/grpc-js";
+import protoLoader from "@grpc/proto-loader";
+import path from "node:path";
+import { config } from "../config.js";
+import { createId } from "../utils/id.js";
+import { logger } from "../utils/logger.js";
+
+type GrpcCallback<T> = (error: grpc.ServiceError | null, response: T) => void;
+
+type AdminGrpcClient = grpc.Client & {
+  HealthCheck: AdminUnaryMethod;
+  GetSystemStats: AdminUnaryMethod;
+  GetOutboxStats: AdminUnaryMethod;
+  GetKafkaLagInfo: AdminUnaryMethod;
+  RunCleanup: AdminUnaryMethod;
+};
+
+type AdminUnaryMethod = (
+  request: Record<string, unknown>,
+  metadata: grpc.Metadata,
+  options: grpc.CallOptions,
+  callback: GrpcCallback<unknown>
+) => void;
+type AdminMethod = "HealthCheck" | "GetSystemStats" | "GetOutboxStats" | "GetKafkaLagInfo" | "RunCleanup";
+type ServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => AdminGrpcClient;
+
+let cachedClient: AdminGrpcClient | null = null;
+
+export function createAdminRouter(): Router {
+  const router = express.Router();
+
+  router.get("/health", async (req, res) => {
+    await callAdmin(req, res, "HealthCheck", {});
+  });
+
+  router.get("/system-stats", async (req, res) => {
+    await callAdmin(req, res, "GetSystemStats", {});
+  });
+
+  router.get("/outbox-stats", async (req, res) => {
+    await callAdmin(req, res, "GetOutboxStats", {});
+  });
+
+  router.get("/kafka-lag", async (req, res) => {
+    await callAdmin(req, res, "GetKafkaLagInfo", {});
+  });
+
+  router.post("/cleanup", async (req, res) => {
+    const body = req.body as { dryRun?: boolean };
+    await callAdmin(req, res, "RunCleanup", { dryRun: body.dryRun ?? true });
+  });
+
+  return router;
+}
+
+async function callAdmin(req: express.Request, res: express.Response, method: AdminMethod, payload: Record<string, unknown>) {
+  const requestId = req.header("x-request-id") ?? createId("admin_req");
+  const traceId = req.header("x-trace-id") ?? requestId;
+  const adminToken = req.header("x-nebula-admin-token") ?? "";
+  if (!adminToken) {
+    res.status(401).json({
+      ok: false,
+      error: {
+        code: "ADMIN_TOKEN_REQUIRED",
+        message: "Admin token is required."
+      }
+    });
+    return;
+  }
+
+  try {
+    const data = await invokeAdmin(method, { requestId, ...payload }, adminToken, traceId);
+    res.json({ ok: true, data });
+  } catch (error) {
+    logger.warn(`Admin RPC failed method=${method}`, { detail: error });
+    res.status(502).json({
+      ok: false,
+      error: {
+        code: "ADMIN_RPC_FAILED",
+        message: error instanceof Error ? error.message : "Admin RPC failed."
+      }
+    });
+  }
+}
+
+function invokeAdmin(method: AdminMethod, request: Record<string, unknown>, adminToken: string, traceId: string) {
+  return new Promise<unknown>((resolve, reject) => {
+    const client = getAdminClient();
+    const metadata = new grpc.Metadata();
+    metadata.set("x-nebula-admin-token", adminToken);
+    metadata.set("x-nebula-trace-id", traceId);
+    client[method](request, metadata, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
+      if (error) reject(error);
+      else resolve(response);
+    });
+  });
+}
+
+function getAdminClient(): AdminGrpcClient {
+  if (cachedClient) return cachedClient;
+
+  const packageDefinition = protoLoader.loadSync(path.join(config.protoDir, "admin.proto"), {
+    keepCase: false,
+    longs: String,
+    enums: String,
+    defaults: true,
+    oneofs: true,
+    includeDirs: [config.protoDir]
+  });
+  const loaded = grpc.loadPackageDefinition(packageDefinition);
+  const nebula = loaded.nebula as grpc.GrpcObject | undefined;
+  const proto = nebula?.proto as grpc.GrpcObject | undefined;
+  const AdminService = proto?.AdminService as ServiceConstructor | undefined;
+  if (!AdminService) {
+    throw new Error("Failed to load nebula.proto.AdminService from admin.proto.");
+  }
+
+  cachedClient = new AdminService(
+    `${config.adminServiceHost}:${config.adminServicePort}`,
+    grpc.credentials.createInsecure()
+  );
+  return cachedClient;
+}
