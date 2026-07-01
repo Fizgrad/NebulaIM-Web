@@ -40,6 +40,18 @@ type GetBridgeUserResponse = {
 
 type RelationUserInfo = BridgeUserInfo;
 
+export type BridgeFriendRequestStatus = 0 | 1 | 2 | 3;
+
+export type BridgeFriendRequest = {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  message: string;
+  status: BridgeFriendRequestStatus;
+  createdAt: number;
+  updatedAt: number;
+};
+
 type CommonBridgeResponse = {
   code: number;
   message: string;
@@ -54,6 +66,27 @@ type ListBridgeFriendsResponse = {
 type CommonRelationResponse = {
   ok: boolean;
   response: CommonBridgeResponse;
+};
+
+type RawFriendRequest = {
+  friendRequestId: string;
+  fromUserId: string;
+  toUserId: string;
+  message?: string;
+  status: number;
+  createdAt?: number | string;
+  updatedAt?: number | string;
+};
+
+type SendFriendRequestResponse = {
+  ok: boolean;
+  friendRequestId: string;
+  response: CommonBridgeResponse;
+};
+
+type ListFriendRequestsResponse = {
+  ok: boolean;
+  requests: RawFriendRequest[];
 };
 
 type CreateBridgeGroupResponse = {
@@ -176,6 +209,68 @@ export async function addBridgeFriend(baseUrl: string, userId: string, friendId:
   );
 }
 
+export async function sendBridgeFriendRequest(baseUrl: string, fromUserId: string, toUserId: string, message = "") {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.post<SendFriendRequestResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/friend-requests`, {
+          fromUserId,
+          toUserId,
+          message
+        }),
+      { retries: 1 }
+    )
+  );
+  return {
+    friendRequestId: response.friendRequestId,
+    response: response.response
+  };
+}
+
+export async function listBridgeFriendRequests(
+  baseUrl: string,
+  userId: string,
+  incoming: boolean,
+  status: BridgeFriendRequestStatus = 0
+): Promise<BridgeFriendRequest[]> {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.get<ListFriendRequestsResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/friend-requests`, {
+          params: { userId, incoming, status }
+        }),
+      { retries: 1 }
+    )
+  );
+  return (response.requests ?? []).map(toFriendRequest);
+}
+
+export async function acceptBridgeFriendRequest(baseUrl: string, userId: string, friendRequestId: string): Promise<void> {
+  await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.post<CommonRelationResponse>(
+          `${baseUrl.replace(/\/$/, "")}/api/relation/friend-requests/${friendRequestId}/accept`,
+          { userId }
+        ),
+      { retries: 1 }
+    )
+  );
+}
+
+export async function rejectBridgeFriendRequest(baseUrl: string, userId: string, friendRequestId: string): Promise<void> {
+  await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.post<CommonRelationResponse>(
+          `${baseUrl.replace(/\/$/, "")}/api/relation/friend-requests/${friendRequestId}/reject`,
+          { userId }
+        ),
+      { retries: 1 }
+    )
+  );
+}
+
 export async function deleteBridgeFriend(baseUrl: string, userId: string, friendId: string): Promise<void> {
   await bridgeRequest(() =>
     requestWithRetry(
@@ -270,6 +365,22 @@ function toUser(user: RelationUserInfo): User {
     gateway: "RelationService",
     connectionId: `user-${user.userId}`
   };
+}
+
+function toFriendRequest(request: RawFriendRequest): BridgeFriendRequest {
+  return {
+    id: request.friendRequestId,
+    fromUserId: request.fromUserId,
+    toUserId: request.toUserId,
+    message: request.message ?? "",
+    status: normalizeFriendRequestStatus(request.status),
+    createdAt: Number(request.createdAt ?? Date.now()),
+    updatedAt: Number(request.updatedAt ?? request.createdAt ?? Date.now())
+  };
+}
+
+function normalizeFriendRequestStatus(status: number): BridgeFriendRequestStatus {
+  return status === 1 || status === 2 || status === 3 ? status : 0;
 }
 
 async function bridgeRequest<T>(operation: () => Promise<{ data: T }>) {

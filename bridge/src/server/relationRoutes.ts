@@ -27,6 +27,26 @@ type ListFriendsResponse = {
   friends: UserInfo[];
 };
 
+type FriendRequestInfo = {
+  friendRequestId: string;
+  fromUserId: string;
+  toUserId: string;
+  message: string;
+  status: number;
+  createdAt: string | number;
+  updatedAt: string | number;
+};
+
+type SendFriendRequestResponse = {
+  response: CommonResponse;
+  friendRequestId: string;
+};
+
+type ListFriendRequestsResponse = {
+  response: CommonResponse;
+  requests: FriendRequestInfo[];
+};
+
 type CreateGroupResponse = {
   response: CommonResponse;
   groupId: string;
@@ -47,6 +67,10 @@ type RelationGrpcClient = grpc.Client & {
   AddFriend: RelationUnary<CommonResponse>;
   DeleteFriend: RelationUnary<CommonResponse>;
   ListFriends: RelationUnary<ListFriendsResponse>;
+  SendFriendRequest: RelationUnary<SendFriendRequestResponse>;
+  AcceptFriendRequest: RelationUnary<CommonResponse>;
+  RejectFriendRequest: RelationUnary<CommonResponse>;
+  ListFriendRequests: RelationUnary<ListFriendRequestsResponse>;
   CreateGroup: RelationUnary<CreateGroupResponse>;
   JoinGroup: RelationUnary<CommonResponse>;
   LeaveGroup: RelationUnary<CommonResponse>;
@@ -57,6 +81,10 @@ type RelationMethod =
   | "AddFriend"
   | "DeleteFriend"
   | "ListFriends"
+  | "SendFriendRequest"
+  | "AcceptFriendRequest"
+  | "RejectFriendRequest"
+  | "ListFriendRequests"
   | "CreateGroup"
   | "JoinGroup"
   | "LeaveGroup"
@@ -73,6 +101,31 @@ const userIdQuerySchema = z.object({
 const addFriendSchema = z.object({
   userId: numericIdSchema,
   friendId: numericIdSchema
+});
+
+const sendFriendRequestSchema = z.object({
+  fromUserId: numericIdSchema,
+  toUserId: numericIdSchema,
+  message: z.string().trim().max(255, "Request message is too long.").optional().default("")
+});
+
+const listFriendRequestsSchema = z.object({
+  userId: numericIdSchema,
+  incoming: z
+    .preprocess((value) => {
+      if (value === undefined) return true;
+      if (value === true || value === "true" || value === "1") return true;
+      if (value === false || value === "false" || value === "0") return false;
+      return value;
+    }, z.boolean())
+    .default(true),
+  status: z.coerce.number().int().min(0).max(3).default(0),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50)
+});
+
+const friendRequestActionSchema = z.object({
+  userId: numericIdSchema
 });
 
 const createGroupSchema = z.object({
@@ -111,6 +164,70 @@ export function createRelationRouter(): Router {
     } catch (error) {
       sendRpcError(res, "RelationService.ListFriends failed.", error);
     }
+  });
+
+  router.get("/friend-requests", async (req, res) => {
+    const parsed = listFriendRequestsSchema.safeParse(req.query);
+    if (!parsed.success) {
+      sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid friend request query.");
+      return;
+    }
+
+    try {
+      const response = await invokeRelation<ListFriendRequestsResponse>("ListFriendRequests", {
+        requestId: requestId(req),
+        userId: Number(parsed.data.userId),
+        incoming: parsed.data.incoming,
+        status: parsed.data.status,
+        page: {
+          page: parsed.data.page,
+          pageSize: parsed.data.pageSize
+        }
+      });
+
+      if (!isOk(response.response)) {
+        sendRelationError(res, response.response);
+        return;
+      }
+
+      res.json({ ok: true, requests: response.requests ?? [], response: response.response });
+    } catch (error) {
+      sendRpcError(res, "RelationService.ListFriendRequests failed.", error);
+    }
+  });
+
+  router.post("/friend-requests", async (req, res) => {
+    const parsed = sendFriendRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid friend request payload.");
+      return;
+    }
+
+    try {
+      const response = await invokeRelation<SendFriendRequestResponse>("SendFriendRequest", {
+        requestId: requestId(req),
+        fromUserId: Number(parsed.data.fromUserId),
+        toUserId: Number(parsed.data.toUserId),
+        message: parsed.data.message
+      });
+
+      if (!isOk(response.response)) {
+        sendRelationError(res, response.response);
+        return;
+      }
+
+      res.json({ ok: true, friendRequestId: response.friendRequestId, response: response.response });
+    } catch (error) {
+      sendRpcError(res, "RelationService.SendFriendRequest failed.", error);
+    }
+  });
+
+  router.post("/friend-requests/:requestId/accept", async (req, res) => {
+    await handleFriendRequestAction(req, res, "AcceptFriendRequest");
+  });
+
+  router.post("/friend-requests/:requestId/reject", async (req, res) => {
+    await handleFriendRequestAction(req, res, "RejectFriendRequest");
   });
 
   router.post("/friends", async (req, res) => {
@@ -224,6 +341,32 @@ export function createRelationRouter(): Router {
   return router;
 }
 
+async function handleFriendRequestAction(req: express.Request, res: express.Response, method: "AcceptFriendRequest" | "RejectFriendRequest") {
+  const parsedRequest = numericIdSchema.safeParse(req.params.requestId);
+  const parsedBody = friendRequestActionSchema.safeParse(req.body);
+  if (!parsedRequest.success || !parsedBody.success) {
+    sendValidationError(res, "User ID and friend request ID must be numeric.");
+    return;
+  }
+
+  try {
+    const response = await invokeRelation<CommonResponse>(method, {
+      requestId: requestId(req),
+      userId: Number(parsedBody.data.userId),
+      friendRequestId: Number(parsedRequest.data)
+    });
+
+    if (!isOk(response)) {
+      sendRelationError(res, response);
+      return;
+    }
+
+    res.json({ ok: true, response });
+  } catch (error) {
+    sendRpcError(res, `RelationService.${method} failed.`, error);
+  }
+}
+
 async function handleGroupUserAction(req: express.Request, res: express.Response, method: "JoinGroup" | "LeaveGroup") {
   const parsedGroup = numericIdSchema.safeParse(req.params.groupId);
   const parsedBody = userActionSchema.safeParse(req.body);
@@ -325,9 +468,9 @@ function sendRpcError(res: express.Response, message: string, error: unknown) {
 }
 
 function statusForRelationCode(code: number) {
-  if ([1001, 7003, 7104, 7105, 10007].includes(code)) return 400;
-  if ([3002, 7002, 7101, 7103].includes(code)) return 404;
-  if ([7001, 7102].includes(code)) return 409;
+  if ([1001, 7003, 7104, 7105, 10007, 12004].includes(code)) return 400;
+  if ([3002, 7002, 7101, 7103, 12001].includes(code)) return 404;
+  if ([7001, 7102, 12002, 12003].includes(code)) return 409;
   return 502;
 }
 
@@ -343,7 +486,11 @@ function relationCodeToString(code: number) {
     7103: "GROUP_NOT_MEMBER",
     7104: "GROUP_OWNER_CANNOT_LEAVE",
     7105: "GROUP_PERMISSION_DENIED",
-    10007: "GATEWAY_PERMISSION_DENIED"
+    10007: "GATEWAY_PERMISSION_DENIED",
+    12001: "FRIEND_REQUEST_NOT_FOUND",
+    12002: "FRIEND_REQUEST_ALREADY_EXISTS",
+    12003: "FRIEND_REQUEST_ALREADY_HANDLED",
+    12004: "FRIEND_REQUEST_REQUIRED"
   };
   return names[code] ?? `RELATION_SERVICE_ERROR_${code}`;
 }
