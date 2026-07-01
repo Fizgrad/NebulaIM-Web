@@ -4,28 +4,45 @@
   <img src="public/logo.png" alt="NebulaIM Logo" width="420" />
 </p>
 
-NebulaIM Web is a modern web client for NebulaIM, a distributed instant messaging system built with C++17, epoll, Reactor, gRPC, Kafka, Redis and MySQL.
-
-NebulaIM Web 是 NebulaIM 分布式即时通信系统的现代化 Web 客户端，用于展示登录、会话、消息收发、在线状态、离线消息、消息 ACK、后台管理和系统监控等核心能力。
+NebulaIM Web is the React web client for NebulaIM. It talks to the C++ Gateway with the NebulaIM binary Packet + Protobuf protocol, and uses the Web Bridge for browser-safe HTTP APIs and the public WebSocket entrypoint.
 
 ## Current Architecture
 
 ```text
-Browser Web Client
-  -> WebSocket binary frame
-  -> NebulaIM PacketHeader + Protobuf body
-NebulaIM Gateway :9000
-  -> gRPC
-UserService / MessageService / PushService / RelationService / ConversationService
-
-Browser Web Client
-  -> HTTP JSON
-NebulaIM Web Bridge :8080
+Browser
+  -> HTTP
+  -> NebulaIM Web Bridge :8080
   -> gRPC
 UserService / RelationService / ConversationService / AdminService
+
+Browser
+  -> WebSocket /ws on NebulaIM Web Bridge :8080
+  -> transparent TCP proxy
+  -> NebulaIM Gateway 127.0.0.1:9000
+  -> NebulaIM PacketHeader + Protobuf body
+MessageService / PushService / UserService
 ```
 
-The browser does not send JSON messages to Gateway. Gateway traffic uses the same NebulaIM packet protocol as native TCP clients, wrapped in WebSocket binary frames.
+The browser never sends JSON to Gateway. Gateway traffic remains NebulaIM binary frames. The public browser endpoint is the Bridge `/ws` route, because the production Gateway listens on loopback.
+
+## Runtime Endpoints
+
+The current production defaults in `src/store/settingsStore.ts` target this host:
+
+```text
+Bridge HTTP:       http://173.231.53.23:8080
+Gateway WebSocket: ws://173.231.53.23:8080/ws
+Gateway TCP label: tcp://173.231.53.23:9000
+```
+
+When the built app is served by the Bridge itself, the frontend uses same-origin endpoints:
+
+```text
+Bridge HTTP:       window.location.origin
+Gateway WebSocket: ws(s)://window.location.host/ws
+```
+
+Persisted browser settings are migrated away from the old `localhost:9000` and `localhost:8080` defaults by settings version `8`.
 
 ## Tech Stack
 
@@ -43,26 +60,28 @@ The browser does not send JSON messages to Gateway. Gateway traffic uses the sam
 
 ## Pages
 
-- `/` Landing page
-- `/login` Gateway `LOGIN_REQ`
-- `/register` Gateway `REGISTER_REQ`
+- `/` product entry page
+- `/login` Gateway `LOGIN_REQ` over Bridge `/ws`
+- `/register` Gateway `REGISTER_REQ` over Bridge `/ws`
 - `/app/chat` conversation list, direct chat, group chat, Gateway heartbeat, ACK state and PUSH messages
-- `/app/contacts` RelationService friends
+- `/app/contacts` RelationService friends plus incoming and outgoing friend requests
 - `/app/groups` RelationService groups
 - `/app/profile` current user and Gateway metadata
-- `/app/settings` Gateway WebSocket and Bridge HTTP endpoints
+- `/app/settings` Gateway WebSocket and Bridge HTTP endpoint controls
 - `/dashboard` Bridge health and AdminService live metrics
 - `/admin` AdminService console
 
 ## Features
 
-- Direct C++ Gateway WebSocket binary transport for register, login, heartbeat, message send, ACK and offline pull.
+- Gateway binary transport over WebSocket through Bridge `/ws`.
 - Browser-side PacketHeader encoder/decoder in `src/services/browserPacketCodec.ts`.
 - Browser-side Protobuf loading in `src/services/browserProtoRegistry.ts`.
 - Gateway client implementation in `src/services/directGatewayClient.ts`.
 - Bridge HTTP API layer for UserService, RelationService, ConversationService and AdminService.
+- Relation workflow based on friend requests: send, list incoming/outgoing, accept and reject.
+- Conversation and message state backed by Gateway pushes and ConversationService HTTP APIs.
 - Zustand stores split by domain.
-- Local persistence for token and settings.
+- Local persistence for auth token and settings.
 - Token expiry tracking and refresh through UserService.
 - HTTP request IDs and trace IDs.
 - HTTP retry and message retry actions.
@@ -109,13 +128,15 @@ cd bridge && npm install
 
 ## Development
 
-Start NebulaIM backend first, then start the Bridge and frontend:
+Start the NebulaIM backend and dependencies first. Then start the Bridge:
 
 ```bash
 cd bridge
 cp .env.example .env
 npm run dev
 ```
+
+Start Vite in another shell:
 
 ```bash
 npm run dev
@@ -127,12 +148,13 @@ Open:
 http://localhost:5173
 ```
 
-Default endpoints:
+Local development defaults still point at the production host unless overridden by env vars:
 
-```text
-Gateway WebSocket: ws://localhost:9000/
-Bridge HTTP:       http://localhost:8080
+```bash
+VITE_GATEWAY_WS_URL=ws://localhost:8080/ws VITE_BRIDGE_HTTP_URL=http://localhost:8080 npm run dev
 ```
+
+Use those overrides when your local Bridge can reach a local Gateway.
 
 ## Build
 
@@ -162,9 +184,11 @@ Prometheus: 9090
 Grafana: 3000
 ```
 
+Gateway `:9000` is a backend-side address. Browser clients should use the Bridge WebSocket route unless Gateway is intentionally exposed.
+
 ## Gateway Protocol
 
-NebulaIM Gateway accepts browser WebSocket upgrade on the same `9000` listener as native TCP clients.
+The frontend Gateway client opens a WebSocket to `/ws` on the Bridge. The Bridge forwards the WebSocket upgrade and all binary frames to the configured Gateway TCP address.
 
 ```text
 WebSocket Binary Payload = NebulaIM PacketCodec bytes
@@ -205,22 +229,26 @@ All packet bodies are Protobuf encoded. Proto files are synchronized from `~/Neb
 
 ## Bridge HTTP API
 
-The Bridge exposes browser-safe HTTP endpoints for backend gRPC services:
+The Bridge exposes HTTP endpoints for backend gRPC services:
 
 ```text
 GET  /health
 GET  /info
+WS   /ws
 
 POST /api/auth/refresh
 GET  /api/auth/users/:userId
 
-GET    /api/relation/friends?userId=<id>
-POST   /api/relation/friends
+GET  /api/relation/friends?userId=<id>
+GET  /api/relation/friend-requests?userId=<id>&incoming=true&status=0
+POST /api/relation/friend-requests
+POST /api/relation/friend-requests/:requestId/accept
+POST /api/relation/friend-requests/:requestId/reject
 DELETE /api/relation/friends/:friendId?userId=<id>
-POST   /api/relation/groups
-POST   /api/relation/groups/:groupId/join
-POST   /api/relation/groups/:groupId/leave
-GET    /api/relation/groups/:groupId/members
+POST /api/relation/groups
+POST /api/relation/groups/:groupId/join
+POST /api/relation/groups/:groupId/leave
+GET  /api/relation/groups/:groupId/members
 
 GET    /api/conversations?userId=<id>&page=1&pageSize=50
 POST   /api/conversations/:conversationId/read
@@ -234,6 +262,26 @@ GET  /api/admin/outbox-stats
 GET  /api/admin/kafka-lag
 POST /api/admin/cleanup
 ```
+
+`GET /info` includes the configured backend service addresses and `websocket: "/ws"`.
+
+Friend requests use these payloads:
+
+```json
+{
+  "fromUserId": "10001",
+  "toUserId": "10002",
+  "message": "hello"
+}
+```
+
+```json
+{
+  "userId": "10002"
+}
+```
+
+The action payload is used for both accept and reject.
 
 Admin requests send the raw AdminService token as:
 
@@ -294,34 +342,33 @@ npm run dev
 http://localhost:5173
 ```
 
-6. Login and send messages:
+6. Verify the live flow:
 
 - Register two users.
 - Login both users in separate browser contexts.
+- From user A, send user B a friend request by numeric backend `user_id`.
+- From user B, accept the incoming friend request.
+- Confirm both users list each other as friends.
 - Open a direct chat by numeric backend `user_id`.
 - Send a message.
 - Confirm sender status reaches `delivered`.
 - Confirm recipient receives `PUSH_MSG`.
 - Check ConversationService via `/api/conversations`.
-- Open `/admin`, enter an AdminService token, then check health/outbox/kafka/cleanup.
+- Open `/admin`, enter an AdminService token from the backend config, then check health/outbox/kafka/cleanup.
 
 ## Admin Tokens
 
-The local backend config contains scoped development tokens:
+Admin tokens are owned by the backend config under `admin_service.admin_tokens`. The frontend stores only the value typed into the Admin page and sends it as `X-Nebula-Admin-Token`.
 
-```text
-nebula-ops-local    health, stats, outbox
-nebula-kafka-local  health, kafka
-nebula-maint-local  health, cleanup
-```
-
-Replace these before exposing the system.
+Use scoped, non-development tokens before exposing the system.
 
 ## Docker Compose
 
 ```bash
 docker compose -f docker-compose.web.yml up --build
 ```
+
+The compose file runs Vite on `5173` and the Bridge on `8080`. The web container uses `ws://localhost:8080/ws` and `http://localhost:8080` from the browser, while the Bridge container reaches backend services through `host.docker.internal`.
 
 ## Verification
 
@@ -332,10 +379,19 @@ cd bridge && npm run lint
 cd bridge && npm run build
 ```
 
+For a running production-style Bridge:
+
+```bash
+curl -s http://127.0.0.1:8080/health
+curl -s http://127.0.0.1:8080/info
+```
+
 ## Common Issues
 
-- Browser login fails: verify Gateway is listening on `ws://localhost:9000/`.
+- Browser login fails: verify `GET /info` returns `websocket: "/ws"` and the browser settings use `ws://<host>:8080/ws`.
+- Bridge `/ws` returns `502`: verify Gateway is listening at `GATEWAY_TCP_HOST:GATEWAY_TCP_PORT`.
 - Gateway closes the socket: verify the frontend is sending binary WebSocket frames, not JSON/text frames.
+- Friend request accept fails: the accepting request body must contain the receiver's numeric `userId`.
 - Message send fails: use numeric backend `user_id` / `group_id`.
 - Message does not reach MessageService: confirm the send uses the same WebSocket connection that logged in.
 - Conversation list is empty: send a message first or verify `ConversationService :50056`.

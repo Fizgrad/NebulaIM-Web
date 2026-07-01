@@ -6,7 +6,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_GATEWAY_WS_URL=ws://localhost:9000/
+      - VITE_GATEWAY_WS_URL=ws://localhost:8080/ws
       - VITE_BRIDGE_HTTP_URL=http://localhost:8080
 
   nebulaim-web-bridge:
