@@ -93,7 +93,7 @@ export function AdminPage() {
               type="password"
               value={tokenInput}
               onChange={(event) => setTokenInput(event.target.value)}
-              placeholder="nebula-ops-local"
+              placeholder="AdminService token"
               autoComplete="off"
               icon={<KeyRound className="h-4 w-4" />}
             />
@@ -252,8 +252,7 @@ export function AdminPage() {
               </div>
               <h2 className="mt-4 text-lg font-semibold text-nebula-text">Connect AdminService</h2>
               <p className="mt-2 max-w-md text-sm text-nebula-muted">
-                Use `nebula-ops-local` for local health, stats and outbox checks. Kafka and cleanup require
-                `nebula-kafka-local` or `nebula-maint-local`.
+                Enter a token from the backend `admin_service.admin_tokens` config. Available actions depend on the token scopes.
               </p>
             </div>
           </Card>

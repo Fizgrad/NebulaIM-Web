@@ -32,7 +32,7 @@ const capabilities = [
   { title: "Prometheus Monitoring", icon: ChartNoAxesCombined }
 ];
 
-const architecture = ["Web Client", "Gateway", "MessageService", "Kafka", "PushService", "Storage"];
+const architecture = ["Web Client", "Web Bridge", "Gateway /ws", "MessageService", "Kafka", "Storage"];
 
 export function LandingPage() {
   return (
@@ -129,7 +129,7 @@ export function LandingPage() {
             <div>
               <h2 className="text-2xl font-semibold text-white">Core Capabilities</h2>
               <p className="mt-2 text-sm text-nebula-muted">
-                Login, sessions, direct chat, Gateway heartbeat, offline pull and ACK status are wired through the C++ Gateway path.
+                Login, sessions, direct chat, Gateway heartbeat, offline pull and ACK status run through the Bridge `/ws` Gateway path.
               </p>
             </div>
           </div>
@@ -154,7 +154,7 @@ export function LandingPage() {
             <div className="mb-6">
               <h2 className="text-2xl font-semibold text-white">Architecture Highlights</h2>
               <p className="mt-2 text-sm text-nebula-muted">
-                Browser clients use the Gateway WebSocket endpoint with the same NebulaIM Packet protocol as native TCP clients.
+                Browser clients use the Bridge `/ws` endpoint, which proxies the same NebulaIM Packet protocol as native TCP clients.
               </p>
             </div>
             <div className="grid gap-3 md:grid-cols-6">
