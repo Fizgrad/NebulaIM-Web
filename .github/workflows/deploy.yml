@@ -1,0 +1,237 @@
+name: Deploy NebulaIM Web
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: nebulaim-web-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+  DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT || '22' }}
+  DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER || 'root' }}
+  DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/nebulaim-web' }}
+  DEPLOY_SERVICE: ${{ vars.DEPLOY_SERVICE || 'nebulaim-web-bridge.service' }}
+
+jobs:
+  build:
+    name: Build release bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            bridge/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Install Bridge dependencies
+        working-directory: bridge
+        run: npm ci
+
+      - name: Build Bridge
+        working-directory: bridge
+        run: npm run build
+
+      - name: Create release archive
+        run: |
+          set -euo pipefail
+
+          rm -rf release nebulaim-web-release.tar.gz
+          mkdir -p release/web release/bridge/dist release/proto release/deploy
+
+          cp -a dist/. release/web/
+          cp -a bridge/dist/. release/bridge/dist/
+          cp bridge/package.json bridge/package-lock.json release/bridge/
+          cp -a proto/. release/proto/
+          cp deploy/production.env.example deploy/nebulaim-web-bridge.service release/deploy/
+          printf '%s\n' "${GITHUB_SHA}" > release/REVISION
+
+          tar -czf nebulaim-web-release.tar.gz -C release .
+
+      - name: Upload release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: nebulaim-web-release
+          path: nebulaim-web-release.tar.gz
+          retention-days: 7
+
+  deploy:
+    name: Deploy to production server
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+
+    steps:
+      - name: Download release archive
+        uses: actions/download-artifact@v4
+        with:
+          name: nebulaim-web-release
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DEPLOY_SSH_KEY}" ]; then
+            echo "Missing required secret: DEPLOY_SSH_KEY" >&2
+            exit 1
+          fi
+          if [ -z "${DEPLOY_HOST}" ]; then
+            echo "Missing required secret or variable: DEPLOY_HOST" >&2
+            exit 1
+          fi
+          if [ -z "${DEPLOY_USER}" ]; then
+            echo "Missing required secret or variable: DEPLOY_USER" >&2
+            exit 1
+          fi
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Upload release archive
+        run: |
+          set -euo pipefail
+
+          scp \
+            -P "${DEPLOY_PORT}" \
+            -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            nebulaim-web-release.tar.gz \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/nebulaim-web-release-${GITHUB_SHA}.tar.gz"
+
+      - name: Activate release
+        run: |
+          set -euo pipefail
+
+          ssh \
+            -p "${DEPLOY_PORT}" \
+            -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' DEPLOY_SERVICE='${DEPLOY_SERVICE}' RELEASE_FILE='/tmp/nebulaim-web-release-${GITHUB_SHA}.tar.gz' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          : "${DEPLOY_PATH:?DEPLOY_PATH is required}"
+          : "${DEPLOY_SERVICE:?DEPLOY_SERVICE is required}"
+          : "${RELEASE_FILE:?RELEASE_FILE is required}"
+
+          if [ "$(id -u)" -eq 0 ]; then
+            SUDO=""
+          else
+            SUDO="sudo"
+          fi
+
+          timestamp="$(date +%Y%m%d%H%M%S)"
+          stage_dir="${DEPLOY_PATH}/.deploy-${timestamp}"
+          tmp_dir="$(mktemp -d /tmp/nebulaim-web.XXXXXX)"
+          swapped="0"
+
+          cleanup_tmp() {
+            rm -rf "${tmp_dir}"
+            rm -f "${RELEASE_FILE}"
+          }
+
+          rollback() {
+            if [ "${swapped}" != "1" ]; then
+              cleanup_tmp
+              return
+            fi
+
+            echo "Deployment failed after swap. Restoring previous release..." >&2
+            ${SUDO} systemctl stop "${DEPLOY_SERVICE}" >/dev/null 2>&1 || true
+            ${SUDO} rm -rf "${DEPLOY_PATH}/web" "${DEPLOY_PATH}/bridge" "${DEPLOY_PATH}/proto"
+
+            if [ -d "${DEPLOY_PATH}/web.prev" ]; then
+              ${SUDO} mv "${DEPLOY_PATH}/web.prev" "${DEPLOY_PATH}/web"
+            fi
+            if [ -d "${DEPLOY_PATH}/bridge.prev" ]; then
+              ${SUDO} mv "${DEPLOY_PATH}/bridge.prev" "${DEPLOY_PATH}/bridge"
+            fi
+            if [ -d "${DEPLOY_PATH}/proto.prev" ]; then
+              ${SUDO} mv "${DEPLOY_PATH}/proto.prev" "${DEPLOY_PATH}/proto"
+            fi
+
+            ${SUDO} systemctl restart "${DEPLOY_SERVICE}" >/dev/null 2>&1 || true
+            cleanup_tmp
+          }
+
+          trap rollback ERR
+          trap cleanup_tmp EXIT
+
+          tar -xzf "${RELEASE_FILE}" -C "${tmp_dir}"
+
+          ${SUDO} mkdir -p "${DEPLOY_PATH}" "${stage_dir}/web" "${stage_dir}/bridge" "${stage_dir}/proto"
+          ${SUDO} cp -a "${tmp_dir}/web/." "${stage_dir}/web/"
+          ${SUDO} cp -a "${tmp_dir}/bridge/dist" "${stage_dir}/bridge/"
+          ${SUDO} cp "${tmp_dir}/bridge/package.json" "${tmp_dir}/bridge/package-lock.json" "${stage_dir}/bridge/"
+          ${SUDO} cp -a "${tmp_dir}/proto/." "${stage_dir}/proto/"
+          ${SUDO} cp "${tmp_dir}/REVISION" "${stage_dir}/REVISION"
+
+          if [ ! -f "${DEPLOY_PATH}/bridge.env" ]; then
+            ${SUDO} cp "${tmp_dir}/deploy/production.env.example" "${DEPLOY_PATH}/bridge.env"
+          fi
+
+          ${SUDO} cp "${tmp_dir}/deploy/nebulaim-web-bridge.service" "/etc/systemd/system/${DEPLOY_SERVICE}"
+          ${SUDO} systemctl daemon-reload
+
+          npm_bin="$(command -v npm || true)"
+          if [ -z "${npm_bin}" ] && [ -x /root/.nvm/versions/node/v26.4.0/bin/npm ]; then
+            npm_bin="/root/.nvm/versions/node/v26.4.0/bin/npm"
+          fi
+          if [ -z "${npm_bin}" ]; then
+            echo "npm was not found on the deploy server." >&2
+            exit 1
+          fi
+
+          cd "${stage_dir}/bridge"
+          ${SUDO} "${npm_bin}" ci --omit=dev --no-audit --no-fund
+
+          ${SUDO} rm -rf "${DEPLOY_PATH}/web.prev" "${DEPLOY_PATH}/bridge.prev" "${DEPLOY_PATH}/proto.prev"
+          if [ -d "${DEPLOY_PATH}/web" ]; then
+            ${SUDO} mv "${DEPLOY_PATH}/web" "${DEPLOY_PATH}/web.prev"
+          fi
+          if [ -d "${DEPLOY_PATH}/bridge" ]; then
+            ${SUDO} mv "${DEPLOY_PATH}/bridge" "${DEPLOY_PATH}/bridge.prev"
+          fi
+          if [ -d "${DEPLOY_PATH}/proto" ]; then
+            ${SUDO} mv "${DEPLOY_PATH}/proto" "${DEPLOY_PATH}/proto.prev"
+          fi
+
+          ${SUDO} mv "${stage_dir}/web" "${DEPLOY_PATH}/web"
+          ${SUDO} mv "${stage_dir}/bridge" "${DEPLOY_PATH}/bridge"
+          ${SUDO} mv "${stage_dir}/proto" "${DEPLOY_PATH}/proto"
+          ${SUDO} rm -rf "${stage_dir}"
+          swapped="1"
+
+          ${SUDO} systemctl restart "${DEPLOY_SERVICE}"
+          ${SUDO} systemctl is-active --quiet "${DEPLOY_SERVICE}"
+
+          ${SUDO} rm -rf "${DEPLOY_PATH}/web.prev" "${DEPLOY_PATH}/bridge.prev" "${DEPLOY_PATH}/proto.prev"
+          swapped="0"
+          REMOTE
