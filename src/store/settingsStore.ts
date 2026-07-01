@@ -3,6 +3,8 @@ import { persist } from "zustand/middleware";
 
 export type ThemeMode = "dark" | "light" | "system";
 
+const publicHost = "173.231.53.23";
+
 type SettingsState = {
   theme: ThemeMode;
   gatewayUrl: string;
@@ -21,7 +23,7 @@ type SettingsState = {
 
 const defaults = {
   theme: "dark" as ThemeMode,
-  gatewayUrl: "tcp://localhost:9000",
+  gatewayUrl: `tcp://${publicHost}:9000`,
   directGatewayWsUrl: import.meta.env.VITE_GATEWAY_WS_URL ?? defaultDirectGatewayWsUrl(),
   bridgeHttpUrl: import.meta.env.VITE_BRIDGE_HTTP_URL ?? defaultBridgeHttpUrl(),
   autoReconnect: true,
@@ -29,13 +31,33 @@ const defaults = {
 };
 
 function defaultDirectGatewayWsUrl() {
-  return "ws://localhost:9000/";
+  if (typeof window === "undefined") return `ws://${publicHost}:8080/ws`;
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  if (["5173", "5174"].includes(window.location.port)) return `ws://${publicHost}:8080/ws`;
+  return `${protocol}//${window.location.host}/ws`;
 }
 
 function defaultBridgeHttpUrl() {
-  if (typeof window === "undefined") return "http://localhost:8080";
-  if (["5173", "5174"].includes(window.location.port)) return "http://localhost:8080";
+  if (typeof window === "undefined") return `http://${publicHost}:8080`;
+  if (["5173", "5174"].includes(window.location.port)) return `http://${publicHost}:8080`;
   return window.location.origin;
+}
+
+function normalizeGatewayUrl(value: string | undefined) {
+  if (!value || value === "tcp://localhost:9000" || value === "tcp://127.0.0.1:9000") return defaults.gatewayUrl;
+  return value;
+}
+
+function normalizeDirectGatewayWsUrl(value: string | undefined) {
+  if (!value || value === "ws://localhost:9000/" || value === "ws://127.0.0.1:9000/") {
+    return defaults.directGatewayWsUrl;
+  }
+  return value;
+}
+
+function normalizeBridgeHttpUrl(value: string | undefined) {
+  if (!value || value === "http://localhost:8080" || value === "http://127.0.0.1:8080") return defaults.bridgeHttpUrl;
+  return value;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -52,23 +74,24 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "nebulaim-settings",
-      version: 7,
+      version: 8,
       merge: (persistedState, currentState) => {
         const state = persistedState as Partial<SettingsState> | undefined;
         return {
           ...currentState,
           ...state,
-          directGatewayWsUrl: state?.directGatewayWsUrl ?? defaults.directGatewayWsUrl,
-          bridgeHttpUrl: state?.bridgeHttpUrl ?? defaults.bridgeHttpUrl
+          gatewayUrl: normalizeGatewayUrl(state?.gatewayUrl),
+          directGatewayWsUrl: normalizeDirectGatewayWsUrl(state?.directGatewayWsUrl),
+          bridgeHttpUrl: normalizeBridgeHttpUrl(state?.bridgeHttpUrl)
         };
       },
       migrate: (persistedState) => {
         const state = persistedState as Partial<SettingsState>;
         return {
           theme: state.theme ?? defaults.theme,
-          gatewayUrl: state.gatewayUrl ?? defaults.gatewayUrl,
-          directGatewayWsUrl: state.directGatewayWsUrl ?? defaults.directGatewayWsUrl,
-          bridgeHttpUrl: state.bridgeHttpUrl ?? defaults.bridgeHttpUrl,
+          gatewayUrl: normalizeGatewayUrl(state.gatewayUrl),
+          directGatewayWsUrl: normalizeDirectGatewayWsUrl(state.directGatewayWsUrl),
+          bridgeHttpUrl: normalizeBridgeHttpUrl(state.bridgeHttpUrl),
           autoReconnect: state.autoReconnect ?? defaults.autoReconnect,
           heartbeatIntervalMs: state.heartbeatIntervalMs ?? defaults.heartbeatIntervalMs
         };

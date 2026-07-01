@@ -1,5 +1,6 @@
 import http from "node:http";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import cors from "cors";
 import express from "express";
@@ -28,7 +29,8 @@ export function createHttpServer(config: BridgeConfig): http.Server {
       user: `${config.userServiceHost}:${config.userServicePort}`,
       relation: `${config.relationServiceHost}:${config.relationServicePort}`,
       conversation: `${config.conversationServiceHost}:${config.conversationServicePort}`,
-      admin: `${config.adminServiceHost}:${config.adminServicePort}`
+      admin: `${config.adminServiceHost}:${config.adminServicePort}`,
+      websocket: "/ws"
     });
   });
 
@@ -48,5 +50,62 @@ export function createHttpServer(config: BridgeConfig): http.Server {
     });
   }
 
-  return http.createServer(app);
+  const server = http.createServer(app);
+  attachGatewayWebSocketProxy(server, config);
+  return server;
+}
+
+function attachGatewayWebSocketProxy(server: http.Server, config: BridgeConfig) {
+  server.on("upgrade", (req, socket, head) => {
+    const pathname = parsePathname(req.url);
+    if (pathname !== "/ws") {
+      socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
+    const upstream = net.connect(config.gatewayTcpPort, config.gatewayTcpHost);
+    let connected = false;
+
+    upstream.on("connect", () => {
+      connected = true;
+      upstream.write(formatUpgradeRequest(req));
+      if (head.length > 0) upstream.write(head);
+      socket.pipe(upstream);
+      upstream.pipe(socket);
+    });
+
+    upstream.on("error", () => {
+      if (!connected && !socket.destroyed) {
+        socket.write("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
+      }
+      socket.destroy();
+    });
+
+    socket.on("error", () => {
+      upstream.destroy();
+    });
+
+    socket.on("close", () => {
+      upstream.destroy();
+    });
+  });
+}
+
+function parsePathname(url: string | undefined) {
+  try {
+    return new URL(url ?? "/", "http://nebulaim.local").pathname;
+  } catch {
+    return "/";
+  }
+}
+
+function formatUpgradeRequest(req: http.IncomingMessage) {
+  const target = req.url && req.url.length > 0 ? req.url : "/";
+  const lines = [`${req.method ?? "GET"} ${target} HTTP/${req.httpVersion}`];
+  for (let i = 0; i < req.rawHeaders.length; i += 2) {
+    lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
+  }
+  lines.push("", "");
+  return lines.join("\r\n");
 }
