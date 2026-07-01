@@ -27,12 +27,12 @@ The browser never sends JSON to Gateway. Gateway traffic remains NebulaIM binary
 
 ## Runtime Endpoints
 
-The current production defaults in `src/store/settingsStore.ts` target this host:
+Production endpoint values are deployment-specific. Use placeholders in documentation and keep real hostnames or IP addresses in environment variables, GitHub Actions secrets or server-side configuration.
 
 ```text
-Bridge HTTP:       http://173.231.53.23:8080
-Gateway WebSocket: ws://173.231.53.23:8080/ws
-Gateway TCP label: tcp://173.231.53.23:9000
+Bridge HTTP:       http://<public-host>:8080
+Gateway WebSocket: ws://<public-host>:8080/ws
+Gateway TCP label: tcp://<public-host>:9000
 ```
 
 When the built app is served by the Bridge itself, the frontend uses same-origin endpoints:
@@ -369,6 +369,30 @@ docker compose -f docker-compose.web.yml up --build
 ```
 
 The compose file runs Vite on `5173` and the Bridge on `8080`. The web container uses `ws://localhost:8080/ws` and `http://localhost:8080` from the browser, while the Bridge container reaches backend services through `host.docker.internal`.
+
+## GitHub Actions Deployment
+
+The workflow in `.github/workflows/deploy.yml` builds the frontend and Bridge, uploads a release archive over SSH and restarts the Bridge systemd service.
+
+Required GitHub Actions secrets:
+
+```text
+DEPLOY_HOST      SSH host or IP address
+DEPLOY_SSH_KEY   Private key with deploy access
+```
+
+Optional secrets or variables:
+
+```text
+DEPLOY_USER      SSH user, defaults to root
+DEPLOY_PORT      SSH port, defaults to 22
+DEPLOY_PATH      Server deploy path, defaults to /opt/nebulaim-web
+DEPLOY_SERVICE   systemd unit name, defaults to nebulaim-web-bridge.service
+```
+
+The workflow does not overwrite an existing server-side `bridge.env`. If `bridge.env` is missing, it initializes one from `deploy/production.env.example`.
+
+The deploy user must be `root` or have passwordless `sudo` for writing the deploy path and restarting systemd. The server must also have Node.js and npm available for installing Bridge production dependencies.
 
 ## Verification
 
