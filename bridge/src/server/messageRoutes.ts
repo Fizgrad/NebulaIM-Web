@@ -2,12 +2,13 @@ import type { Router } from "express";
 import express from "express";
 import * as grpc from "@grpc/grpc-js";
 import protoLoader from "@grpc/proto-loader";
-import mysql, { type Pool, type RowDataPacket } from "mysql2/promise";
+import { type RowDataPacket } from "mysql2/promise";
 import path from "node:path";
 import { z } from "zod";
 import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
+import { getMysqlPool } from "./mysqlPool.js";
 
 type CommonResponse = {
   code: number;
@@ -59,7 +60,6 @@ const sendGroupSchema = z.object({
 });
 
 let cachedClient: MessageGrpcClient | null = null;
-let cachedPool: Pool | null = null;
 
 type MessageRow = RowDataPacket & {
   message_id: string;
@@ -224,26 +224,6 @@ function getMessageClient(): MessageGrpcClient {
     grpc.credentials.createInsecure()
   );
   return cachedClient;
-}
-
-function getMysqlPool(): Pool {
-  if (cachedPool) return cachedPool;
-  if (!config.mysqlHost || !config.mysqlUser || !config.mysqlDatabase) {
-    throw new Error("MySQL history connection is not configured.");
-  }
-
-  cachedPool = mysql.createPool({
-    host: config.mysqlHost,
-    port: config.mysqlPort,
-    user: config.mysqlUser,
-    password: config.mysqlPassword,
-    database: config.mysqlDatabase,
-    waitForConnections: true,
-    connectionLimit: config.mysqlConnectionLimit,
-    supportBigNumbers: true,
-    bigNumberStrings: true
-  });
-  return cachedPool;
 }
 
 function toBridgeMessage(row: MessageRow) {

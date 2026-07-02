@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Group } from "../types/group";
 import { GroupList } from "../components/groups/GroupList";
@@ -12,7 +12,14 @@ export function GroupsPage() {
   const navigate = useNavigate();
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const openConversationForGroup = useChatStore((state) => state.openConversationForGroup);
+  const loadGroups = useGroupStore((state) => state.loadGroups);
   const loadGroupMembers = useGroupStore((state) => state.loadGroupMembers);
+
+  useEffect(() => {
+    void loadGroups().catch(() => {
+      // Store owns the displayed error state.
+    });
+  }, [loadGroups]);
 
   function handleMessage(group: Group) {
     openConversationForGroup(group);
