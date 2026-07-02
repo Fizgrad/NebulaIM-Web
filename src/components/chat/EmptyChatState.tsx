@@ -17,7 +17,7 @@ export function EmptyChatState() {
   }, [loadFriends]);
 
   return (
-    <div className="grid h-full place-items-center overflow-y-auto p-8">
+    <div className="grid h-full place-items-center overflow-y-auto p-4 sm:p-8">
       <div className="w-full max-w-2xl">
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
           <MessageSquareMore className="h-7 w-7" />
@@ -33,7 +33,7 @@ export function EmptyChatState() {
               key={user.id}
               type="button"
               onClick={() => openConversationForUser(user)}
-              className="flex w-full items-center gap-4 rounded-lg border border-nebula-border bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08]"
+              className="flex w-full items-center gap-3 rounded-lg border border-nebula-border bg-white/[0.04] p-3 text-left transition hover:bg-white/[0.08] sm:gap-4 sm:p-4"
             >
               <Avatar name={user.nickname} color={user.avatarColor} online={user.status === "online"} />
               <span className="min-w-0 flex-1">

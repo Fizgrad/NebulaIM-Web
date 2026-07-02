@@ -38,6 +38,39 @@ body {
   background: rgb(var(--nebula-bg));
 }
 
+#root {
+  min-height: 100vh;
+}
+
+.app-shell-main {
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+}
+
+.mobile-bottom-nav {
+  min-height: calc(4.5rem + env(safe-area-inset-bottom));
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+.chat-viewport {
+  height: calc(100vh - 4.5rem - env(safe-area-inset-bottom));
+}
+
+@supports (height: 100dvh) {
+  .chat-viewport {
+    height: calc(100dvh - 4.5rem - env(safe-area-inset-bottom));
+  }
+}
+
+@media (min-width: 768px) {
+  .app-shell-main {
+    padding-bottom: 0;
+  }
+
+  .chat-viewport {
+    height: 100dvh;
+  }
+}
+
 button,
 input,
 textarea {

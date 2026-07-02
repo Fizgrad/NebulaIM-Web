@@ -2,12 +2,14 @@ import { useEffect } from "react";
 import { ChatWindow } from "../components/chat/ChatWindow";
 import { ConversationList } from "../components/chat/ConversationList";
 import { useChatStore } from "../store/chatStore";
+import { cn } from "../utils/cn";
 
 export function ChatPage() {
   const activeConversationId = useChatStore((state) => state.activeConversationId);
   const startGatewaySession = useChatStore((state) => state.startGatewaySession);
   const loadConversations = useChatStore((state) => state.loadConversations);
   const loadMessages = useChatStore((state) => state.loadMessages);
+  const setActiveConversationId = useChatStore((state) => state.setActiveConversationId);
 
   useEffect(() => {
     void startGatewaySession();
@@ -44,10 +46,15 @@ export function ChatPage() {
     };
   }, [activeConversationId, loadConversations, loadMessages]);
 
+  const hasActiveConversation = Boolean(activeConversationId);
+
   return (
-    <div className="flex h-screen min-w-0">
-      <ConversationList />
-      <ChatWindow />
+    <div className="chat-viewport flex min-w-0 overflow-hidden">
+      <ConversationList className={cn("md:flex", hasActiveConversation ? "hidden" : "flex")} />
+      <ChatWindow
+        className={cn("md:flex", hasActiveConversation ? "flex" : "hidden")}
+        onBack={() => setActiveConversationId(null)}
+      />
     </div>
   );
 }
