@@ -238,6 +238,7 @@ WS   /ws
 
 POST /api/auth/refresh
 GET  /api/auth/users/:userId
+GET  /api/auth/users/by-username/:username
 
 GET  /api/relation/friends?userId=<id>
 GET  /api/relation/friend-requests?userId=<id>&incoming=true&status=0
@@ -346,7 +347,7 @@ http://localhost:5173
 
 - Register two users.
 - Login both users in separate browser contexts.
-- From user A, send user B a friend request by numeric backend `user_id`.
+- From user A, send user B a friend request by username or numeric backend `user_id`.
 - From user B, accept the incoming friend request.
 - Confirm both users list each other as friends.
 - Open a direct chat by numeric backend `user_id`.

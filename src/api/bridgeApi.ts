@@ -186,6 +186,27 @@ export async function getBridgeUserInfo(baseUrl: string, userId: string): Promis
   };
 }
 
+export async function getBridgeUserByUsername(baseUrl: string, username: string): Promise<User> {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () => httpClient.get<GetBridgeUserResponse>(`${baseUrl.replace(/\/$/, "")}/api/auth/users/by-username/${encodeURIComponent(username)}`),
+      { retries: 1 }
+    )
+  );
+  const user = response.user;
+  return {
+    id: user.userId,
+    username: user.username,
+    nickname: user.nickname || user.username || `User ${user.userId}`,
+    avatar: user.avatar || undefined,
+    avatarColor: "from-cyan-500 to-blue-500",
+    status: "online",
+    registeredAt: Number(user.createdAt ?? Date.now()),
+    gateway: "UserService",
+    connectionId: `user-${user.userId}`
+  };
+}
+
 export async function listBridgeFriends(baseUrl: string, userId: string): Promise<User[]> {
   const response = await bridgeRequest(() =>
     requestWithRetry(
