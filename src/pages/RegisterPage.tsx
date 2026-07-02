@@ -14,7 +14,7 @@ export function RegisterPage() {
         </Link>
         <Card className="p-6">
           <div className="mb-6">
-            <h1 className="text-2xl font-semibold text-white">Create account</h1>
+            <h1 className="text-2xl font-semibold text-nebula-text">Create account</h1>
             <p className="mt-2 text-sm text-nebula-muted">Create a NebulaIM account through Gateway REGISTER_REQ.</p>
           </div>
           <RegisterForm />

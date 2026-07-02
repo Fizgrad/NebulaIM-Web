@@ -42,7 +42,7 @@ export function ChatWindow() {
 
   return (
     <section className="flex h-screen min-w-0 flex-1 flex-col bg-nebula-bg">
-      <header className="flex flex-col gap-3 border-b border-nebula-border bg-nebula-panel/54 px-5 py-4 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
+      <header className="flex flex-col gap-3 border-b border-nebula-border bg-nebula-panel/[0.54] px-5 py-4 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           {conversation.type === "group" ? (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 text-white">

@@ -10,7 +10,7 @@ type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
 export const Input = forwardRef<HTMLInputElement, InputProps>(({ label, error, icon, className, ...props }, ref) => {
   return (
     <label className="block space-y-2">
-      {label ? <span className="text-sm font-medium text-slate-200">{label}</span> : null}
+      {label ? <span className="text-sm font-medium text-nebula-text">{label}</span> : null}
       <span className="relative block">
         {icon ? <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">{icon}</span> : null}
         <input

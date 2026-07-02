@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, LogOut, RotateCcw, Trash2, Wifi } from "lucide-react";
+import { CheckCircle2, LogOut, Monitor, Moon, RotateCcw, Sun, Trash2, Wifi } from "lucide-react";
 import { useState } from "react";
 import { testBridgeConnection } from "../api/bridgeApi";
 import { Button } from "../components/common/Button";
@@ -13,6 +13,11 @@ import { useSettingsStore, type ThemeMode } from "../store/settingsStore";
 import { cn } from "../utils/cn";
 
 const themes: ThemeMode[] = ["dark", "light", "system"];
+const themeIcons = {
+  dark: Moon,
+  light: Sun,
+  system: Monitor
+} satisfies Record<ThemeMode, typeof Moon>;
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -52,18 +57,22 @@ export function SettingsPage() {
           <section>
             <h2 className="text-base font-semibold text-nebula-text">Theme</h2>
             <div className="mt-3 inline-flex rounded-lg border border-nebula-border bg-white/[0.04] p-1">
-              {themes.map((theme) => (
-                <button
-                  key={theme}
-                  onClick={() => settings.setTheme(theme)}
-                  className={cn(
-                    "h-9 rounded-md px-4 text-sm capitalize transition",
-                    settings.theme === theme ? "bg-cyan-300/14 text-cyan-100" : "text-nebula-muted hover:text-nebula-text"
-                  )}
-                >
-                  {theme}
-                </button>
-              ))}
+              {themes.map((theme) => {
+                const Icon = themeIcons[theme];
+                return (
+                  <button
+                    key={theme}
+                    onClick={() => settings.setTheme(theme)}
+                    className={cn(
+                      "inline-flex h-9 items-center gap-2 rounded-md px-4 text-sm capitalize transition",
+                      settings.theme === theme ? "bg-cyan-300/[0.14] text-cyan-100" : "text-nebula-muted hover:text-nebula-text"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {theme}
+                  </button>
+                );
+              })}
             </div>
           </section>
 
