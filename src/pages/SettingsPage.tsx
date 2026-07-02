@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, LogOut, Monitor, Moon, RotateCcw, Sun, Trash2, Wifi } from "lucide-react";
+import { BarChart3, CheckCircle2, LogOut, Monitor, Moon, RotateCcw, ShieldCheck, Sun, Trash2, Wifi } from "lucide-react";
 import { useState } from "react";
 import { testBridgeConnection } from "../api/bridgeApi";
 import { Button } from "../components/common/Button";
@@ -124,37 +124,51 @@ export function SettingsPage() {
           </section>
         </Card>
 
-        <Card className="space-y-3 p-5">
-          <h2 className="text-base font-semibold text-nebula-text">Local Actions</h2>
-          <Button variant="primary" className="w-full justify-start" onClick={() => void handleTestConnection()} disabled={testState === "loading"}>
-            {testState === "loading" ? <Spinner /> : testState === "success" ? <CheckCircle2 className="h-4 w-4" /> : <Wifi className="h-4 w-4" />}
-            Test Services
-          </Button>
-          {testMessage ? (
-            <div
-              className={cn(
-                "rounded-lg border px-3 py-2 text-xs",
-                testState === "success"
-                  ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
-                  : "border-red-300/20 bg-red-400/10 text-red-100"
-              )}
-            >
-              {testMessage}
-            </div>
-          ) : null}
-          <Button variant="secondary" className="w-full justify-start" onClick={settings.resetSettings}>
-            <RotateCcw className="h-4 w-4" />
-            Reset settings
-          </Button>
-          <Button variant="danger" className="w-full justify-start" onClick={clearLocalData}>
-            <Trash2 className="h-4 w-4" />
-            Clear local data
-          </Button>
-          <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
-            <LogOut className="h-4 w-4" />
-            Logout
-          </Button>
-        </Card>
+        <div className="space-y-4">
+          <Card className="space-y-3 p-5">
+            <h2 className="text-base font-semibold text-nebula-text">System Tools</h2>
+            <Button variant="secondary" className="w-full justify-start" onClick={() => navigate("/dashboard")}>
+              <BarChart3 className="h-4 w-4" />
+              Dashboard
+            </Button>
+            <Button variant="outline" className="w-full justify-start" onClick={() => navigate("/admin")}>
+              <ShieldCheck className="h-4 w-4" />
+              Admin Console
+            </Button>
+          </Card>
+
+          <Card className="space-y-3 p-5">
+            <h2 className="text-base font-semibold text-nebula-text">Local Actions</h2>
+            <Button variant="primary" className="w-full justify-start" onClick={() => void handleTestConnection()} disabled={testState === "loading"}>
+              {testState === "loading" ? <Spinner /> : testState === "success" ? <CheckCircle2 className="h-4 w-4" /> : <Wifi className="h-4 w-4" />}
+              Test Services
+            </Button>
+            {testMessage ? (
+              <div
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-xs",
+                  testState === "success"
+                    ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+                    : "border-red-300/20 bg-red-400/10 text-red-100"
+                )}
+              >
+                {testMessage}
+              </div>
+            ) : null}
+            <Button variant="secondary" className="w-full justify-start" onClick={settings.resetSettings}>
+              <RotateCcw className="h-4 w-4" />
+              Reset settings
+            </Button>
+            <Button variant="danger" className="w-full justify-start" onClick={clearLocalData}>
+              <Trash2 className="h-4 w-4" />
+              Clear local data
+            </Button>
+            <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
+          </Card>
+        </div>
       </div>
     </PageContainer>
   );

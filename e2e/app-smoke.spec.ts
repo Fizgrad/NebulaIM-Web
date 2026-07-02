@@ -46,14 +46,18 @@ test("settings page shows Bridge HTTP and Gateway WebSocket defaults", async ({ 
   await expect(page.getByLabel("Bridge HTTP URL")).toHaveValue("http://example.invalid:8080");
 });
 
-test("dashboard stays inside app navigation", async ({ page }) => {
+test("system tools stay out of the primary client navigation", async ({ page }) => {
   await authenticate(page);
 
   await page.goto("/app/chat");
-  await page.getByRole("link", { name: "Dashboard" }).click();
+  await expect(page.getByRole("link", { name: "Dashboard" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
 
-  await expect(page).toHaveURL(/\/app\/dashboard$/);
-  await expect(page.getByRole("link", { name: "Contacts" })).toBeVisible();
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { name: "System Tools" })).toBeVisible();
+  await page.getByRole("button", { name: "Dashboard" }).click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
 });
 
 test("theme controls apply dark light and system modes", async ({ page }) => {

@@ -30,7 +30,7 @@ export const useAdminStore = create<AdminState>()(
       cleanupResult: null,
       isLoading: false,
       error: null,
-      setAdminToken: (adminToken) => set({ adminToken }),
+      setAdminToken: (adminToken) => set({ adminToken, overview: null, cleanupResult: null, error: null }),
       clearAdminToken: () => set({ adminToken: "", overview: null, cleanupResult: null, error: null }),
       loadOverview: async () => {
         const adminToken = get().adminToken.trim();
@@ -55,6 +55,8 @@ export const useAdminStore = create<AdminState>()(
         } catch (error) {
           set({
             isLoading: false,
+            overview: null,
+            cleanupResult: null,
             error: error instanceof Error ? error.message : "Failed to load admin overview."
           });
         }

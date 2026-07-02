@@ -244,19 +244,7 @@ export function AdminPage() {
               </Card>
             </div>
           </>
-        ) : (
-          <Card className="grid min-h-64 place-items-center p-8 text-center">
-            <div>
-              <div className="mx-auto grid h-14 w-14 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
-                <Shield className="h-6 w-6" />
-              </div>
-              <h2 className="mt-4 text-lg font-semibold text-nebula-text">Connect AdminService</h2>
-              <p className="mt-2 max-w-md text-sm text-nebula-muted">
-                Enter a token from the backend `admin_service.admin_tokens` config. Available actions depend on the token scopes.
-              </p>
-            </div>
-          </Card>
-        )}
+        ) : null}
       </main>
     </div>
   );
