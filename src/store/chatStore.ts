@@ -53,6 +53,29 @@ function conversationIdForIncoming(message: Message) {
 
 type BackendConversationInfo = Awaited<ReturnType<typeof listBridgeConversations>>[number];
 
+function isLocalOnlyConversation(conversation: Conversation) {
+  return !conversation.backendConversationId;
+}
+
+function mergeBackendConversations(localConversations: Conversation[], backendConversations: Conversation[]) {
+  const localById = new Map(localConversations.map((conversation) => [conversation.id, conversation]));
+  const merged = backendConversations.map((backendConversation) => {
+    const localConversation = localById.get(backendConversation.id);
+    if (!localConversation) return backendConversation;
+    return {
+      ...backendConversation,
+      title: localConversation.title || backendConversation.title,
+      avatar: localConversation.avatar ?? backendConversation.avatar,
+      online: localConversation.online ?? backendConversation.online,
+      targetUserId: backendConversation.targetUserId ?? localConversation.targetUserId,
+      groupId: backendConversation.groupId ?? localConversation.groupId
+    };
+  });
+  const backendIds = new Set(backendConversations.map((conversation) => conversation.id));
+  const localOnly = localConversations.filter((conversation) => isLocalOnlyConversation(conversation) && !backendIds.has(conversation.id));
+  return sortConversations([...merged, ...localOnly]);
+}
+
 function mapBackendConversation(item: BackendConversationInfo): Conversation {
   const groupId = item.groupId && item.groupId !== "0" ? item.groupId : undefined;
   const peerUserId = item.peerUserId && item.peerUserId !== "0" ? item.peerUserId : undefined;
@@ -139,7 +162,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!isNumericId(userId)) return;
     const conversations = await listBridgeConversations(settings.bridgeHttpUrl, userId);
     set((state) => {
-      const mapped = sortConversations(conversations.map(mapBackendConversation));
+      const mapped = mergeBackendConversations(state.conversations, conversations.map(mapBackendConversation));
       const activeStillExists = mapped.some((conversation) => conversation.id === state.activeConversationId);
       return {
         conversations: mapped,
