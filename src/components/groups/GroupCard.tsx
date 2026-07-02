@@ -23,6 +23,7 @@ export function GroupCard({ group, onMessage, onMembers, onJoin, onLeave }: Grou
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate text-sm font-semibold text-nebula-text">{group.name}</h3>
+            <Badge tone="slate">ID {group.id}</Badge>
             <Badge tone="violet">{group.memberCount} members</Badge>
           </div>
           <p className="mt-1 text-xs text-nebula-muted">Created {formatRelativeTime(group.createdAt)}</p>
