@@ -25,11 +25,11 @@ export function ConnectionStatus({ status, compact = false }: ConnectionStatusPr
         <span>Gateway</span>
         <span>{connected ? "Connected" : status.state === "reconnecting" ? "Reconnecting" : "Disconnected"}</span>
       </span>
-      <span className="inline-flex items-center gap-1.5">
+      <span className={cn("items-center gap-1.5", compact ? "hidden" : "inline-flex")}>
         <Activity className="h-3.5 w-3.5 text-cyan-200" />
         <span>{status.heartbeatOk ? "Heartbeat OK" : "Heartbeat waiting"}</span>
       </span>
-      <span className="text-cyan-100">Latency {status.latency || 18}ms</span>
+      <span className={cn("text-cyan-100", compact && "hidden")}>Latency {status.latency || 18}ms</span>
       {status.lastHeartbeatAt ? (
         <span className="inline-flex items-center gap-1.5 text-nebula-muted">
           <Clock3 className="h-3.5 w-3.5" />

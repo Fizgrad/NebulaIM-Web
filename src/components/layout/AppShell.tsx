@@ -14,7 +14,7 @@ export function AppShell() {
     <div className="flex min-h-screen bg-nebula-bg text-nebula-text">
       <NebulaBackground />
       <Sidebar />
-      <main className="min-w-0 flex-1 overflow-hidden">
+      <main className="app-shell-main min-w-0 flex-1 overflow-x-hidden md:h-screen md:overflow-hidden">
         <Outlet />
       </main>
     </div>

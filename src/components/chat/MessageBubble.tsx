@@ -24,7 +24,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
   return (
     <div className={cn("flex gap-3", message.isMine ? "justify-end" : "justify-start")}>
       {!message.isMine ? <Avatar name={senderName} src={message.senderAvatar} size="sm" /> : null}
-      <div className={cn("flex max-w-[78%] flex-col md:max-w-[62%]", message.isMine ? "items-end" : "items-start")}>
+      <div className={cn("flex max-w-[84%] flex-col sm:max-w-[78%] md:max-w-[62%]", message.isMine ? "items-end" : "items-start")}>
         <div
           className={cn(
             "flex w-fit max-w-full flex-col gap-1.5 rounded-lg px-4 py-3 shadow-panel transition-[width,max-width] duration-200",

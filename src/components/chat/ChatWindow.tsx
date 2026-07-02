@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useRef } from "react";
-import { ShieldCheck, UsersRound } from "lucide-react";
+import { ArrowLeft, ShieldCheck, UsersRound } from "lucide-react";
 import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { EmptyChatState } from "./EmptyChatState";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { Avatar } from "../common/Avatar";
 import { Badge } from "../common/Badge";
+import { Button } from "../common/Button";
 import { useChatStore } from "../../store/chatStore";
+import { cn } from "../../utils/cn";
 
-export function ChatWindow() {
+type ChatWindowProps = {
+  className?: string;
+  onBack?: () => void;
+};
+
+export function ChatWindow({ className, onBack }: ChatWindowProps) {
   const activeConversationId = useChatStore((state) => state.activeConversationId);
   const conversations = useChatStore((state) => state.conversations);
   const messagesByConversationId = useChatStore((state) => state.messagesByConversationId);
@@ -34,18 +41,30 @@ export function ChatWindow() {
 
   if (!conversation) {
     return (
-      <section className="h-screen flex-1 bg-nebula-bg">
+      <section className={cn("h-full flex-1 bg-nebula-bg", className)}>
         <EmptyChatState />
       </section>
     );
   }
 
   return (
-    <section className="flex h-screen min-w-0 flex-1 flex-col bg-nebula-bg">
-      <header className="flex flex-col gap-3 border-b border-nebula-border bg-nebula-panel/[0.54] px-5 py-4 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
+    <section className={cn("h-full min-w-0 flex-1 flex-col bg-nebula-bg", className)}>
+      <header className="flex flex-col gap-3 border-b border-nebula-border bg-nebula-panel/[0.54] px-3 py-3 backdrop-blur-xl sm:px-5 sm:py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
+          {onBack ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 md:hidden"
+              onClick={onBack}
+              aria-label="Back to conversations"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          ) : null}
           {conversation.type === "group" ? (
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 text-white">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 text-white sm:h-11 sm:w-11">
               <UsersRound className="h-5 w-5" />
             </span>
           ) : (
@@ -64,10 +83,15 @@ export function ChatWindow() {
             </div>
           </div>
         </div>
-        <ConnectionStatus status={gatewayStatus} />
+        <div className="hidden sm:block">
+          <ConnectionStatus status={gatewayStatus} />
+        </div>
+        <div className="sm:hidden">
+          <ConnectionStatus status={gatewayStatus} compact />
+        </div>
       </header>
 
-      <div ref={scrollRef} className="flex-1 space-y-5 overflow-y-auto px-5 py-6">
+      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:space-y-5 sm:px-5 sm:py-6">
         <div className="mx-auto w-fit rounded-full border border-nebula-border bg-white/[0.04] px-3 py-1 text-xs text-nebula-muted">
           Today
         </div>

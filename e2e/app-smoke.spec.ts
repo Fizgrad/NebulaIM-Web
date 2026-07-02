@@ -60,6 +60,18 @@ test("system tools stay out of the primary client navigation", async ({ page }) 
   await expect(page).toHaveURL(/\/dashboard$/);
 });
 
+test("mobile chat layout shows the conversation list without horizontal overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await authenticate(page);
+
+  await page.goto("/app/chat");
+
+  await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Mobile navigation" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 test("theme controls apply dark light and system modes", async ({ page }) => {
   await authenticate(page);
   await page.emulateMedia({ colorScheme: "light" });
