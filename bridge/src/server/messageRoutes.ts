@@ -32,9 +32,10 @@ type MessageGrpcClient = grpc.Client & {
   SendSingleMessage: MessageUnary<SendMessageResponse>;
   SendGroupMessage: MessageUnary<SendMessageResponse>;
   AckMessage: MessageUnary<{ response: CommonResponse }>;
+  MarkConversationRead: MessageUnary<CommonResponse>;
 };
 
-type MessageMethod = "SendSingleMessage" | "SendGroupMessage" | "AckMessage";
+type MessageMethod = "SendSingleMessage" | "SendGroupMessage" | "AckMessage" | "MarkConversationRead";
 
 type MessageServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => MessageGrpcClient;
 
@@ -189,6 +190,14 @@ export function createMessageRouter(): Router {
   });
 
   return router;
+}
+
+export async function markMessageConversationRead(userId: string, conversationId: string, requestIdValue: string): Promise<CommonResponse> {
+  return invokeMessage<CommonResponse>("MarkConversationRead", {
+    requestId: requestIdValue,
+    userId: Number(userId),
+    conversationId: Number(conversationId)
+  });
 }
 
 function invokeMessage<TResponse>(method: MessageMethod, request: Record<string, unknown>) {
