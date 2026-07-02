@@ -68,6 +68,13 @@ type CommonRelationResponse = {
   response: CommonBridgeResponse;
 };
 
+type SendBridgeMessageResponse = {
+  ok: boolean;
+  messageId: string;
+  serverTimestamp: number | string;
+  response: CommonBridgeResponse;
+};
+
 type RawFriendRequest = {
   friendRequestId: string;
   fromUserId: string;
@@ -372,6 +379,58 @@ export async function markBridgeConversationRead(baseUrl: string, userId: string
       { retries: 1 }
     )
   );
+}
+
+export async function sendBridgeSingleMessage(
+  baseUrl: string,
+  fromUserId: string,
+  toUserId: string,
+  content: string,
+  clientSequenceId: number
+) {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.post<SendBridgeMessageResponse>(`${baseUrl.replace(/\/$/, "")}/api/messages/single`, {
+          fromUserId,
+          toUserId,
+          content,
+          clientSequenceId
+        }),
+      { retries: 1 }
+    )
+  );
+  return {
+    messageId: response.messageId,
+    serverTimestamp: Number(response.serverTimestamp || Date.now()),
+    response: response.response
+  };
+}
+
+export async function sendBridgeGroupMessage(
+  baseUrl: string,
+  fromUserId: string,
+  groupId: string,
+  content: string,
+  clientSequenceId: number
+) {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.post<SendBridgeMessageResponse>(`${baseUrl.replace(/\/$/, "")}/api/messages/group`, {
+          fromUserId,
+          groupId,
+          content,
+          clientSequenceId
+        }),
+      { retries: 1 }
+    )
+  );
+  return {
+    messageId: response.messageId,
+    serverTimestamp: Number(response.serverTimestamp || Date.now()),
+    response: response.response
+  };
 }
 
 function toUser(user: RelationUserInfo): User {

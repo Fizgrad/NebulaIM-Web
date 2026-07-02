@@ -10,6 +10,7 @@ Browser
 NebulaIM Web Bridge :8080
   -> gRPC protobuf
 UserService / RelationService / ConversationService / AdminService
+MessageService
 
 Browser
   -> WebSocket /ws
@@ -36,6 +37,9 @@ USER_SERVICE_PORT=50051
 
 RELATION_SERVICE_HOST=127.0.0.1
 RELATION_SERVICE_PORT=50053
+
+MESSAGE_SERVICE_HOST=127.0.0.1
+MESSAGE_SERVICE_PORT=50052
 
 CONVERSATION_SERVICE_HOST=127.0.0.1
 CONVERSATION_SERVICE_PORT=50056
@@ -98,6 +102,7 @@ WS  /ws
   "name": "nebulaim-web-bridge",
   "gateway": "127.0.0.1:9000",
   "user": "127.0.0.1:50051",
+  "message": "127.0.0.1:50052",
   "relation": "127.0.0.1:50053",
   "conversation": "127.0.0.1:50056",
   "admin": "127.0.0.1:50057",
@@ -158,6 +163,37 @@ Accept and reject use:
 ```
 
 The Bridge forwards these calls to `nebula.proto.RelationService` on `RELATION_SERVICE_HOST:RELATION_SERVICE_PORT`. IDs must be numeric backend IDs.
+
+## Message HTTP API
+
+```text
+POST /api/messages/single
+POST /api/messages/group
+```
+
+Direct message request:
+
+```json
+{
+  "fromUserId": "10001",
+  "toUserId": "10002",
+  "content": "hello",
+  "clientSequenceId": 123456
+}
+```
+
+Group message request:
+
+```json
+{
+  "fromUserId": "10001",
+  "groupId": "20001",
+  "content": "hello",
+  "clientSequenceId": 123456
+}
+```
+
+The Bridge forwards these calls to `nebula.proto.MessageService` on `MESSAGE_SERVICE_HOST:MESSAGE_SERVICE_PORT`. The frontend uses these endpoints for sending messages so a refreshed browser session can send even when the Gateway WebSocket has not re-run `LOGIN_REQ`.
 
 ## Conversation HTTP API
 
@@ -233,7 +269,7 @@ src/services/directGatewayClient.ts
 6. Confirm a browser can open `ws://<bridge-host>:8080/ws`.
 7. Login through the frontend.
 8. Send and accept a friend request before testing friend-dependent flows.
-9. Send a direct message to a numeric backend `user_id`.
+9. Open Chat, select a friend, and send a direct message.
 10. Open `/admin`, enter an AdminService token and call health/outbox/kafka/cleanup.
 
 ## Common Errors

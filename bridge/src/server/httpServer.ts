@@ -8,6 +8,7 @@ import type { BridgeConfig } from "../config.js";
 import { createAdminRouter } from "./adminRoutes.js";
 import { createAuthRouter } from "./authRoutes.js";
 import { createConversationRouter } from "./conversationRoutes.js";
+import { createMessageRouter } from "./messageRoutes.js";
 import { createRelationRouter } from "./relationRoutes.js";
 
 export function createHttpServer(config: BridgeConfig): http.Server {
@@ -27,6 +28,7 @@ export function createHttpServer(config: BridgeConfig): http.Server {
       name: "nebulaim-web-bridge",
       gateway: `${config.gatewayTcpHost}:${config.gatewayTcpPort}`,
       user: `${config.userServiceHost}:${config.userServicePort}`,
+      message: `${config.messageServiceHost}:${config.messageServicePort}`,
       relation: `${config.relationServiceHost}:${config.relationServicePort}`,
       conversation: `${config.conversationServiceHost}:${config.conversationServicePort}`,
       admin: `${config.adminServiceHost}:${config.adminServicePort}`,
@@ -35,6 +37,7 @@ export function createHttpServer(config: BridgeConfig): http.Server {
   });
 
   app.use("/api/auth", createAuthRouter());
+  app.use("/api/messages", createMessageRouter());
   app.use("/api/relation", createRelationRouter());
   app.use("/api/conversations", createConversationRouter());
   app.use("/api/admin", createAdminRouter());
