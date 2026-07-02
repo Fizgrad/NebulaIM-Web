@@ -86,33 +86,52 @@ export function ContactList({ onMessage }: ContactListProps) {
           ) : null}
         </section>
 
-        <Card className="p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
-              <UserPlus className="h-4 w-4" />
-            </span>
-            <h3 className="text-sm font-semibold text-nebula-text">Add Friend</h3>
-          </div>
-          <form className="space-y-3" onSubmit={handleAddFriend}>
-            <Input
-              label="Username or User ID"
-              value={friendIdentifier}
-              onChange={(event) => setFriendIdentifier(event.target.value)}
-              placeholder="username or user id"
-            />
-            <Input
-              label="Request Message"
-              value={requestMessage}
-              onChange={(event) => setRequestMessage(event.target.value)}
-              placeholder="request message"
-              maxLength={255}
-            />
-            <Button type="submit" variant="primary" disabled={isSendingRequest} className="h-11 w-full">
-              <SendHorizontal className="h-4 w-4" />
-              {isSendingRequest ? "Sending..." : "Send Request"}
-            </Button>
-          </form>
-        </Card>
+        <aside className="space-y-4">
+          <Card className="p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+                <UserPlus className="h-4 w-4" />
+              </span>
+              <h3 className="text-sm font-semibold text-nebula-text">Add Friend</h3>
+            </div>
+            <form className="space-y-3" onSubmit={handleAddFriend}>
+              <Input
+                label="Username or User ID"
+                value={friendIdentifier}
+                onChange={(event) => setFriendIdentifier(event.target.value)}
+                placeholder="username or user id"
+              />
+              <Input
+                label="Request Message"
+                value={requestMessage}
+                onChange={(event) => setRequestMessage(event.target.value)}
+                placeholder="request message"
+                maxLength={255}
+              />
+              <Button type="submit" variant="primary" disabled={isSendingRequest} className="h-11 w-full">
+                <SendHorizontal className="h-4 w-4" />
+                {isSendingRequest ? "Sending..." : "Send Request"}
+              </Button>
+            </form>
+          </Card>
+
+          <RequestPanel
+            title="Incoming Requests"
+            icon={<Inbox className="h-4 w-4" />}
+            empty="No pending incoming requests."
+            requests={incomingRequests}
+            isLoading={isLoading}
+            onAccept={acceptFriendRequest}
+            onReject={rejectFriendRequest}
+          />
+          <RequestPanel
+            title="Outgoing Requests"
+            icon={<Clock3 className="h-4 w-4" />}
+            empty="No pending outgoing requests."
+            requests={outgoingRequests}
+            isLoading={isLoading}
+          />
+        </aside>
       </div>
 
       {isSendingRequest ? (
@@ -122,25 +141,6 @@ export function ContactList({ onMessage }: ContactListProps) {
       ) : null}
       {error ? <div className="rounded-lg border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm text-red-100">{error}</div> : null}
       {notice ? <div className="rounded-lg border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">{notice}</div> : null}
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <RequestPanel
-          title="Incoming Requests"
-          icon={<Inbox className="h-4 w-4" />}
-          empty="No pending incoming requests."
-          requests={incomingRequests}
-          isLoading={isLoading}
-          onAccept={acceptFriendRequest}
-          onReject={rejectFriendRequest}
-        />
-        <RequestPanel
-          title="Outgoing Requests"
-          icon={<Clock3 className="h-4 w-4" />}
-          empty="No pending outgoing requests."
-          requests={outgoingRequests}
-          isLoading={isLoading}
-        />
-      </div>
 
     </div>
   );

@@ -21,7 +21,12 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     if (!keyword) return groups;
-    return groups.filter((group) => group.name.toLowerCase().includes(keyword));
+    return groups.filter(
+      (group) =>
+        group.name.toLowerCase().includes(keyword) ||
+        group.id.includes(keyword) ||
+        group.ownerId.includes(keyword)
+    );
   }, [groups, query]);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
@@ -51,10 +56,10 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
         <section className="space-y-3">
           <Input
-            label="Search Groups"
+            label="Search Joined Groups"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="group name"
+            placeholder="group name or id"
             icon={<Search className="h-4 w-4" />}
           />
 
@@ -72,7 +77,7 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
           </div>
           {!isLoading && filtered.length === 0 ? (
             <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-6 text-sm text-nebula-muted">
-              No groups loaded. Create a group or join one from the actions panel.
+              No joined groups match this search. Create a group or join one by ID from the actions panel.
             </div>
           ) : null}
         </section>

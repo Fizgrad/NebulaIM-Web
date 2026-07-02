@@ -101,9 +101,7 @@ export const useGroupStore = create<GroupState>((set) => ({
       const numericGroupId = requireNumericId(groupId, "Group ID");
       await leaveBridgeGroup(settings.bridgeHttpUrl, userId, numericGroupId);
       set((state) => ({
-        groups: state.groups.map((item) =>
-          item.id === groupId ? { ...item, memberCount: Math.max(0, item.memberCount - 1) } : item
-        ),
+        groups: state.groups.filter((item) => item.id !== groupId),
         isLoading: false,
         error: null
       }));
