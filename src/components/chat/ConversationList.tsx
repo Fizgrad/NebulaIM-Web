@@ -24,7 +24,7 @@ export function ConversationList({ className }: ConversationListProps) {
   return (
     <section
       className={cn(
-        "h-full w-full flex-col border-r border-nebula-border bg-nebula-panel/[0.62] backdrop-blur-xl md:w-[360px]",
+        "h-full min-h-0 w-full flex-col border-r border-nebula-border bg-nebula-panel/[0.62] backdrop-blur-xl md:w-[360px]",
         className
       )}
     >
@@ -40,7 +40,7 @@ export function ConversationList({ className }: ConversationListProps) {
           icon={<Search className="h-4 w-4" />}
         />
       </div>
-      <div className="flex-1 space-y-2 overflow-y-auto p-2.5 sm:p-3">
+      <div className="chat-scroll-area min-h-0 flex-1 space-y-2 overflow-y-auto p-2.5 sm:p-3">
         {filtered.map((conversation) => (
           <ConversationItem
             key={conversation.id}
