@@ -1,9 +1,10 @@
 import { FormEvent, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { LogIn, Plus, Search, UsersRound } from "lucide-react";
 import type { Group } from "../../types/group";
 import { GroupCard } from "./GroupCard";
 import { Button } from "../common/Button";
 import { Input } from "../common/Input";
+import { Card } from "../common/Card";
 import { useGroupStore } from "../../store/groupStore";
 
 type GroupListProps = {
@@ -47,47 +48,82 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 xl:grid-cols-[1fr_360px_320px]">
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search groups"
-          icon={<Search className="h-4 w-4" />}
-        />
-        <form className="flex gap-2" onSubmit={handleCreate}>
-          <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="New group name" className="h-10" />
-          <Button type="submit" variant="primary" disabled={isLoading}>
-            <Plus className="h-4 w-4" />
-            Create
-          </Button>
-        </form>
-        <form className="flex gap-2" onSubmit={handleJoin}>
-          <Input value={joinId} onChange={(event) => setJoinId(event.target.value)} placeholder="Group id" className="h-10" />
-          <Button type="submit" variant="outline" disabled={isLoading}>
-            Join
-          </Button>
-        </form>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
+        <section className="space-y-3">
+          <Input
+            label="Search Groups"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="group name"
+            icon={<Search className="h-4 w-4" />}
+          />
+
+          <div className="grid gap-3 xl:grid-cols-2">
+            {filtered.map((group) => (
+              <GroupCard
+                key={group.id}
+                group={group}
+                onMessage={onMessage}
+                onMembers={onMembers}
+                onJoin={joinGroup}
+                onLeave={leaveGroup}
+              />
+            ))}
+          </div>
+          {!isLoading && filtered.length === 0 ? (
+            <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-6 text-sm text-nebula-muted">
+              No groups loaded. Create a group or join one from the actions panel.
+            </div>
+          ) : null}
+        </section>
+
+        <div className="space-y-4">
+          <Card className="p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+                <Plus className="h-4 w-4" />
+              </span>
+              <h3 className="text-sm font-semibold text-nebula-text">Create Group</h3>
+            </div>
+            <form className="space-y-3" onSubmit={handleCreate}>
+              <Input
+                label="Group Name"
+                value={groupName}
+                onChange={(event) => setGroupName(event.target.value)}
+                placeholder="new group name"
+              />
+              <Button type="submit" variant="primary" disabled={isLoading} className="h-11 w-full">
+                <UsersRound className="h-4 w-4" />
+                Create Group
+              </Button>
+            </form>
+          </Card>
+
+          <Card className="p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-lg border border-violet-300/20 bg-violet-300/10 text-violet-100">
+                <LogIn className="h-4 w-4" />
+              </span>
+              <h3 className="text-sm font-semibold text-nebula-text">Join Group</h3>
+            </div>
+            <form className="space-y-3" onSubmit={handleJoin}>
+              <Input
+                label="Group ID"
+                value={joinId}
+                onChange={(event) => setJoinId(event.target.value)}
+                placeholder="numeric group id"
+                inputMode="numeric"
+              />
+              <Button type="submit" variant="outline" disabled={isLoading} className="h-11 w-full">
+                <LogIn className="h-4 w-4" />
+                Join Group
+              </Button>
+            </form>
+          </Card>
+        </div>
       </div>
 
       {error ? <div className="rounded-lg border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm text-red-100">{error}</div> : null}
-
-      <div className="grid gap-3 xl:grid-cols-2">
-        {filtered.map((group) => (
-          <GroupCard
-            key={group.id}
-            group={group}
-            onMessage={onMessage}
-            onMembers={onMembers}
-            onJoin={joinGroup}
-            onLeave={leaveGroup}
-          />
-        ))}
-      </div>
-      {!isLoading && filtered.length === 0 ? (
-        <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-6 text-sm text-nebula-muted">
-          No real groups loaded. Create a group or join with a numeric backend group_id.
-        </div>
-      ) : null}
     </div>
   );
 }
