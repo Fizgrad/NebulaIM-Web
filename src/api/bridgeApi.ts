@@ -1,6 +1,7 @@
 import axios from "axios";
 import type { BridgeHealth, BridgeInfo } from "../types/bridge";
 import { ApiError, httpClient, requestWithRetry } from "./client";
+import type { Group } from "../types/group";
 import type { User } from "../types/user";
 
 type BridgeErrorResponse = {
@@ -121,6 +122,25 @@ type CreateBridgeGroupResponse = {
   response: CommonBridgeResponse;
 };
 
+type BridgeGroupInfo = {
+  groupId: string;
+  name: string;
+  ownerId: string;
+  memberCount: number;
+  createdAt: number | string;
+  updatedAt?: number | string;
+};
+
+type GetBridgeGroupResponse = {
+  ok: boolean;
+  group: BridgeGroupInfo;
+};
+
+type ListBridgeGroupsResponse = {
+  ok: boolean;
+  groups: BridgeGroupInfo[];
+};
+
 type ListBridgeGroupMembersResponse = {
   ok: boolean;
   members: RelationUserInfo[];
@@ -132,6 +152,7 @@ type BridgeConversationInfo = {
   ownerUserId: string;
   peerUserId: string;
   groupId: string;
+  groupName?: string;
   lastMessageId: string;
   lastMessagePreview: string;
   lastMessageAt: string | number;
@@ -347,6 +368,29 @@ export async function createBridgeGroup(baseUrl: string, ownerId: string, name: 
   };
 }
 
+export async function getBridgeGroup(baseUrl: string, groupId: string): Promise<Group> {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () => httpClient.get<GetBridgeGroupResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups/${groupId}`),
+      { retries: 1 }
+    )
+  );
+  return toGroup(response.group);
+}
+
+export async function listBridgeGroups(baseUrl: string, userId: string): Promise<Group[]> {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.get<ListBridgeGroupsResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups`, {
+          params: { userId }
+        }),
+      { retries: 1 }
+    )
+  );
+  return (response.groups ?? []).map(toGroup);
+}
+
 export async function joinBridgeGroup(baseUrl: string, userId: string, groupId: string): Promise<void> {
   await bridgeRequest(() =>
     requestWithRetry(
@@ -482,6 +526,17 @@ function toUser(user: RelationUserInfo): User {
     registeredAt: Number(user.createdAt ?? Date.now()),
     gateway: "RelationService",
     connectionId: `user-${user.userId}`
+  };
+}
+
+function toGroup(group: BridgeGroupInfo): Group {
+  return {
+    id: group.groupId,
+    name: group.name || `Group ${group.groupId}`,
+    ownerId: group.ownerId,
+    memberCount: Number(group.memberCount ?? 0),
+    members: [],
+    createdAt: Number(group.createdAt ?? Date.now())
   };
 }
 

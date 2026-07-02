@@ -2,11 +2,13 @@ import type { Router } from "express";
 import express from "express";
 import * as grpc from "@grpc/grpc-js";
 import protoLoader from "@grpc/proto-loader";
+import { type RowDataPacket } from "mysql2/promise";
 import path from "node:path";
 import { z } from "zod";
 import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
+import { getMysqlPool, hasMysqlConfig } from "./mysqlPool.js";
 
 type CommonResponse = {
   code: number;
@@ -20,6 +22,7 @@ type ConversationInfo = {
   ownerUserId: string;
   peerUserId: string;
   groupId: string;
+  groupName?: string;
   lastMessageId: string;
   lastMessagePreview: string;
   lastMessageAt: string | number;
@@ -33,6 +36,11 @@ type ConversationInfo = {
 type ListConversationsResponse = {
   response: CommonResponse;
   conversations: ConversationInfo[];
+};
+
+type GroupNameRow = RowDataPacket & {
+  id: string;
+  group_name: string;
 };
 
 type ConversationUnary<TResponse> = (
@@ -101,7 +109,8 @@ export function createConversationRouter(): Router {
         return;
       }
 
-      res.json({ ok: true, conversations: response.conversations ?? [], response: response.response });
+      const conversations = await attachGroupNames(response.conversations ?? []);
+      res.json({ ok: true, conversations, response: response.response });
     } catch (error) {
       sendRpcError(res, "ConversationService.ListConversations failed.", error);
     }
@@ -166,6 +175,33 @@ async function handleConversationAction(
     res.json({ ok: true, response });
   } catch (error) {
     sendRpcError(res, `ConversationService.${method} failed.`, error);
+  }
+}
+
+async function attachGroupNames(conversations: ConversationInfo[]) {
+  const groupIds = Array.from(
+    new Set(
+      conversations
+        .map((conversation) => String(conversation.groupId ?? ""))
+        .filter((groupId) => groupId !== "" && groupId !== "0" && numericIdSchema.safeParse(groupId).success)
+    )
+  );
+  if (groupIds.length === 0 || !hasMysqlConfig()) return conversations;
+
+  try {
+    const placeholders = groupIds.map(() => "?").join(",");
+    const [rows] = await getMysqlPool().execute<GroupNameRow[]>(
+      `SELECT id, group_name FROM \`groups\` WHERE id IN (${placeholders})`,
+      groupIds
+    );
+    const namesById = new Map(rows.map((row) => [String(row.id), row.group_name]));
+    return conversations.map((conversation) => ({
+      ...conversation,
+      groupName: namesById.get(String(conversation.groupId)) ?? conversation.groupName
+    }));
+  } catch (error) {
+    logger.warn("Conversation group name lookup failed.", { detail: error });
+    return conversations;
   }
 }
 

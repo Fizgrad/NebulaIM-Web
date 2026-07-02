@@ -2,11 +2,13 @@ import type { Router } from "express";
 import express from "express";
 import * as grpc from "@grpc/grpc-js";
 import protoLoader from "@grpc/proto-loader";
+import { type RowDataPacket } from "mysql2/promise";
 import path from "node:path";
 import { z } from "zod";
 import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
+import { getMysqlPool, hasMysqlConfig } from "./mysqlPool.js";
 
 type CommonResponse = {
   code: number;
@@ -52,9 +54,27 @@ type CreateGroupResponse = {
   groupId: string;
 };
 
+type GroupInfo = {
+  groupId: string;
+  name: string;
+  ownerId: string;
+  memberCount: number;
+  createdAt: string | number;
+  updatedAt: string | number;
+};
+
 type ListGroupMembersResponse = {
   response: CommonResponse;
   members: UserInfo[];
+};
+
+type GroupRow = RowDataPacket & {
+  id: string;
+  group_name: string;
+  owner_id: string;
+  member_count: number;
+  created_at: string;
+  updated_at: string;
 };
 
 type RelationUnary<TResponse> = (
@@ -96,6 +116,10 @@ const numericIdSchema = z.string().regex(/^\d+$/, "ID must be numeric.");
 
 const userIdQuerySchema = z.object({
   userId: numericIdSchema
+});
+
+const optionalUserIdQuerySchema = z.object({
+  userId: numericIdSchema.optional()
 });
 
 const addFriendSchema = z.object({
@@ -281,6 +305,25 @@ export function createRelationRouter(): Router {
     }
   });
 
+  router.get("/groups", async (req, res) => {
+    const parsed = optionalUserIdQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid group query.");
+      return;
+    }
+    if (!parsed.data.userId) {
+      sendValidationError(res, "User ID is required to list groups.");
+      return;
+    }
+
+    try {
+      const groups = await listGroupsForUser(parsed.data.userId);
+      res.json({ ok: true, groups });
+    } catch (error) {
+      sendGroupLookupError(res, "Group list is unavailable.", error);
+    }
+  });
+
   router.post("/groups", async (req, res) => {
     const parsed = createGroupSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -314,6 +357,31 @@ export function createRelationRouter(): Router {
     await handleGroupUserAction(req, res, "LeaveGroup");
   });
 
+  router.get("/groups/:groupId", async (req, res) => {
+    const parsedGroup = numericIdSchema.safeParse(req.params.groupId);
+    if (!parsedGroup.success) {
+      sendValidationError(res, "Group ID must be numeric.");
+      return;
+    }
+
+    try {
+      const group = await getGroupInfo(parsedGroup.data);
+      if (!group) {
+        res.status(404).json({
+          ok: false,
+          error: {
+            code: "GROUP_NOT_FOUND",
+            message: "Group was not found."
+          }
+        });
+        return;
+      }
+      res.json({ ok: true, group });
+    } catch (error) {
+      sendGroupLookupError(res, "Group lookup is unavailable.", error);
+    }
+  });
+
   router.get("/groups/:groupId/members", async (req, res) => {
     const parsedGroup = numericIdSchema.safeParse(req.params.groupId);
     if (!parsedGroup.success) {
@@ -339,6 +407,52 @@ export function createRelationRouter(): Router {
   });
 
   return router;
+}
+
+async function listGroupsForUser(userId: string): Promise<GroupInfo[]> {
+  if (!hasMysqlConfig()) {
+    throw new Error("MySQL group lookup connection is not configured.");
+  }
+
+  const [rows] = await getMysqlPool().execute<GroupRow[]>(
+    `SELECT g.id, g.group_name, g.owner_id, g.created_at, g.updated_at, COUNT(all_members.user_id) AS member_count
+     FROM group_members current_member
+     INNER JOIN \`groups\` g ON g.id = current_member.group_id
+     LEFT JOIN group_members all_members ON all_members.group_id = g.id
+     WHERE current_member.user_id = ?
+     GROUP BY g.id, g.group_name, g.owner_id, g.created_at, g.updated_at
+     ORDER BY g.updated_at DESC, g.id DESC`,
+    [userId]
+  );
+  return rows.map(toGroupInfo);
+}
+
+async function getGroupInfo(groupId: string): Promise<GroupInfo | null> {
+  if (!hasMysqlConfig()) {
+    throw new Error("MySQL group lookup connection is not configured.");
+  }
+
+  const [rows] = await getMysqlPool().execute<GroupRow[]>(
+    `SELECT g.id, g.group_name, g.owner_id, g.created_at, g.updated_at, COUNT(gm.user_id) AS member_count
+     FROM \`groups\` g
+     LEFT JOIN group_members gm ON gm.group_id = g.id
+     WHERE g.id = ?
+     GROUP BY g.id, g.group_name, g.owner_id, g.created_at, g.updated_at
+     LIMIT 1`,
+    [groupId]
+  );
+  return rows[0] ? toGroupInfo(rows[0]) : null;
+}
+
+function toGroupInfo(row: GroupRow): GroupInfo {
+  return {
+    groupId: String(row.id),
+    name: row.group_name,
+    ownerId: String(row.owner_id),
+    memberCount: Number(row.member_count ?? 0),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at)
+  };
 }
 
 async function handleFriendRequestAction(req: express.Request, res: express.Response, method: "AcceptFriendRequest" | "RejectFriendRequest") {
@@ -462,6 +576,17 @@ function sendRpcError(res: express.Response, message: string, error: unknown) {
     ok: false,
     error: {
       code: "RELATION_SERVICE_UNAVAILABLE",
+      message: error instanceof Error ? error.message : message
+    }
+  });
+}
+
+function sendGroupLookupError(res: express.Response, message: string, error: unknown) {
+  logger.warn(message, { detail: error });
+  res.status(503).json({
+    ok: false,
+    error: {
+      code: "GROUP_LOOKUP_UNAVAILABLE",
       message: error instanceof Error ? error.message : message
     }
   });

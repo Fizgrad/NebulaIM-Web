@@ -9,9 +9,11 @@ import { createId } from "../utils/id";
 import { getGatewayClient } from "../services/gatewayClient";
 import { useSettingsStore } from "./settingsStore";
 import { useContactStore } from "./contactStore";
+import { useGroupStore } from "./groupStore";
 import { clientLogger } from "../services/clientLogger";
 import {
   type BridgeMessageInfo,
+  getBridgeGroup,
   getBridgeUserInfo,
   listBridgeConversationMessages,
   listBridgeConversations,
@@ -21,6 +23,9 @@ import {
 } from "../api/bridgeApi";
 
 type MessagesByConversationId = Record<string, Message[]>;
+
+const resolvedUsers = new Map<string, User>();
+const resolvedGroups = new Map<string, Group>();
 
 type ChatState = {
   conversations: Conversation[];
@@ -56,11 +61,30 @@ function directConversationId(userId: string) {
 }
 
 function knownUser(userId: string) {
-  return useContactStore.getState().contacts.find((contact) => contact.id === userId) ?? null;
+  return useContactStore.getState().contacts.find((contact) => contact.id === userId) ?? resolvedUsers.get(userId) ?? null;
 }
 
 function directConversationTitle(userId: string) {
   return knownUser(userId)?.nickname ?? `User ${userId}`;
+}
+
+function rememberUser(user: User) {
+  resolvedUsers.set(user.id, user);
+  return user;
+}
+
+function knownGroup(groupId?: string) {
+  if (!groupId) return null;
+  return useGroupStore.getState().groups.find((group) => group.id === groupId) ?? resolvedGroups.get(groupId) ?? null;
+}
+
+function rememberGroup(group: Group) {
+  resolvedGroups.set(group.id, group);
+  return group;
+}
+
+function groupConversationTitle(groupId?: string, fallbackId?: string) {
+  return knownGroup(groupId)?.name ?? `Group ${groupId ?? fallbackId ?? ""}`.trim();
 }
 
 function conversationIdForIncoming(message: Message) {
@@ -78,7 +102,12 @@ function isFallbackDirectTitle(conversation: Conversation) {
   return conversation.type === "single" && Boolean(conversation.targetUserId) && conversation.title === `User ${conversation.targetUserId}`;
 }
 
+function isFallbackGroupTitle(conversation: Conversation) {
+  return conversation.type === "group" && conversation.title === groupConversationTitle(undefined, conversation.groupId ?? conversation.backendConversationId);
+}
+
 function selectConversationTitle(localConversation: Conversation, backendConversation: Conversation) {
+  if (isFallbackGroupTitle(backendConversation)) return localConversation.title || backendConversation.title;
   if (!isFallbackDirectTitle(backendConversation)) return backendConversation.title;
   return localConversation.title || backendConversation.title;
 }
@@ -121,16 +150,25 @@ function applyUserToMessage(message: Message, user: User): Message {
   };
 }
 
+function applyGroupToConversation(conversation: Conversation, group: Group): Conversation {
+  if (conversation.type !== "group" || conversation.groupId !== group.id) return conversation;
+  return {
+    ...conversation,
+    title: group.name || conversation.title
+  };
+}
+
 function mapBackendConversation(item: BackendConversationInfo, friendById: Map<string, User>): Conversation {
   const groupId = item.groupId && item.groupId !== "0" ? item.groupId : undefined;
   const peerUserId = item.peerUserId && item.peerUserId !== "0" ? item.peerUserId : undefined;
   const isGroup = item.conversationType === 2 || Boolean(groupId);
   const friend = peerUserId ? friendById.get(peerUserId) : undefined;
+  const groupName = isGroup ? item.groupName || knownGroup(groupId)?.name : undefined;
   return {
     id: isGroup && groupId ? `group-${groupId}` : directConversationId(peerUserId ?? item.conversationId),
     backendConversationId: item.conversationId,
     type: isGroup ? "group" : "single",
-    title: isGroup ? `Group ${groupId ?? item.conversationId}` : friend?.nickname ?? `User ${peerUserId ?? item.conversationId}`,
+    title: isGroup ? groupName ?? groupConversationTitle(groupId, item.conversationId) : friend?.nickname ?? `User ${peerUserId ?? item.conversationId}`,
     avatar: friend?.avatar,
     online: isGroup ? undefined : friend ? friend.status === "online" : true,
     lastMessage: item.lastMessagePreview || "No messages yet",
@@ -242,6 +280,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const userId = useAuthStore.getState().user?.id;
     if (!isNumericId(userId)) return;
     const conversations = await listBridgeConversations(settings.bridgeHttpUrl, userId);
+    conversations.forEach((item) => {
+      const groupId = item.groupId && item.groupId !== "0" ? item.groupId : undefined;
+      if (groupId && item.groupName) {
+        rememberGroup({
+          id: groupId,
+          name: item.groupName,
+          ownerId: "",
+          memberCount: 0,
+          members: [],
+          createdAt: Number(item.updatedAt || Date.now())
+        });
+      }
+    });
     const friendById = new Map(useContactStore.getState().contacts.map((friend) => [friend.id, friend]));
     set((state) => {
       const mapped = mergeBackendConversations(state.conversations, conversations.map((item) => mapBackendConversation(item, friendById)));
@@ -256,11 +307,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .filter((peerId): peerId is string => Boolean(peerId));
     for (const peerId of Array.from(new Set(missingPeerIds))) {
       void getBridgeUserInfo(settings.bridgeHttpUrl, peerId)
+        .then(rememberUser)
         .then((user) => {
           set((state) => ({ conversations: state.conversations.map((conversation) => applyUserToConversation(conversation, user)) }));
         })
         .catch((error) => {
           clientLogger.warn("Resolve conversation user failed", error);
+        });
+    }
+    const missingGroupIds = conversations
+      .map((item) => {
+        const groupId = item.groupId && item.groupId !== "0" ? item.groupId : "";
+        return groupId && !item.groupName && !knownGroup(groupId) ? groupId : "";
+      })
+      .filter((groupId): groupId is string => Boolean(groupId));
+    for (const groupId of Array.from(new Set(missingGroupIds))) {
+      void getBridgeGroup(settings.bridgeHttpUrl, groupId)
+        .then(rememberGroup)
+        .then((group) => {
+          set((state) => ({ conversations: state.conversations.map((conversation) => applyGroupToConversation(conversation, group)) }));
+        })
+        .catch((error) => {
+          clientLogger.warn("Resolve conversation group failed", error);
         });
     }
   },
@@ -283,6 +351,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     );
     for (const senderId of missingSenderIds) {
       void getBridgeUserInfo(settings.bridgeHttpUrl, senderId)
+        .then(rememberUser)
         .then((user) => {
           set((state) => ({
             conversations: state.conversations.map((item) => applyUserToConversation(item, user)),
@@ -378,14 +447,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
   receiveMessage: (message) => {
-    const peerUser = !message.groupId ? knownUser(message.fromUserId) : null;
+    const currentUser = useAuthStore.getState().user;
+    const senderUser = message.isMine ? currentUser ?? null : knownUser(message.fromUserId);
+    const group = knownGroup(message.groupId);
     set((state) => {
       const conversationId = message.conversationId || conversationIdForIncoming(message);
       const normalizedMessage = {
         ...message,
         conversationId,
-        senderName: peerUser?.nickname ?? message.senderName,
-        senderAvatar: peerUser?.avatar ?? message.senderAvatar
+        senderName: senderUser?.nickname ?? message.senderName,
+        senderAvatar: senderUser?.avatar ?? message.senderAvatar
       };
       const existingConversation = state.conversations.find((conversation) => conversation.id === conversationId);
       const isActive = state.activeConversationId === conversationId;
@@ -395,6 +466,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           conversation.id === conversationId
             ? {
                 ...conversation,
+                title: group ? group.name : conversation.title,
                 lastMessage: message.content,
                 lastMessageAt: message.createdAt,
                 unreadCount: isActive ? 0 : conversation.unreadCount + 1
@@ -405,8 +477,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const incomingConversation: Conversation = {
           id: conversationId,
           type: message.groupId ? "group" : "single",
-          title: message.groupId ? `Group ${message.groupId}` : peerUser?.nickname ?? directConversationTitle(message.fromUserId),
-          avatar: peerUser?.avatar,
+          title: message.groupId ? groupConversationTitle(message.groupId) : senderUser?.nickname ?? directConversationTitle(message.fromUserId),
+          avatar: senderUser?.avatar,
           online: true,
           lastMessage: message.content,
           lastMessageAt: message.createdAt,
@@ -424,35 +496,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
         conversations: sortConversations(conversations)
       };
     });
-    if (!message.groupId) {
-      const conversationId = message.conversationId || conversationIdForIncoming(message);
-      const applyResolvedUser = (user: User) => {
-        set((state) => ({
-          conversations: state.conversations.map((conversation) => applyUserToConversation(conversation, user)),
-          messagesByConversationId: Object.fromEntries(
-            Object.entries(state.messagesByConversationId).map(([key, messages]) => [
-              key,
-              messages.map((item) => applyUserToMessage(item, user))
-            ])
-          )
-        }));
-      };
-      if (peerUser) {
-        applyResolvedUser(peerUser);
-      } else {
-        void getBridgeUserInfo(useSettingsStore.getState().bridgeHttpUrl, message.fromUserId)
-          .then(applyResolvedUser)
-          .catch((error) => {
-            clientLogger.warn("Resolve incoming message user failed", error);
-          });
-      }
-      void get()
-        .loadConversations()
-        .then(() => get().loadMessages(conversationId))
+    const conversationId = message.conversationId || conversationIdForIncoming(message);
+    const settings = useSettingsStore.getState();
+    const applyResolvedUser = (user: User) => {
+      set((state) => ({
+        conversations: state.conversations.map((conversation) => applyUserToConversation(conversation, user)),
+        messagesByConversationId: Object.fromEntries(
+          Object.entries(state.messagesByConversationId).map(([key, messages]) => [
+            key,
+            messages.map((item) => applyUserToMessage(item, user))
+          ])
+        )
+      }));
+    };
+    if (senderUser) {
+      applyResolvedUser(senderUser);
+    } else {
+      void getBridgeUserInfo(settings.bridgeHttpUrl, message.fromUserId)
+        .then(rememberUser)
+        .then(applyResolvedUser)
         .catch((error) => {
-          clientLogger.warn("Reload conversations after incoming message failed", error);
+          clientLogger.warn("Resolve incoming message user failed", error);
         });
     }
+    if (message.groupId) {
+      const applyResolvedGroup = (resolvedGroup: Group) => {
+        set((state) => ({ conversations: state.conversations.map((conversation) => applyGroupToConversation(conversation, resolvedGroup)) }));
+      };
+      if (group) {
+        applyResolvedGroup(group);
+      } else {
+        void getBridgeGroup(settings.bridgeHttpUrl, message.groupId)
+          .then(rememberGroup)
+          .then(applyResolvedGroup)
+          .catch((error) => {
+            clientLogger.warn("Resolve incoming message group failed", error);
+          });
+      }
+    }
+    void get()
+      .loadConversations()
+      .then(() => get().loadMessages(conversationId))
+      .catch((error) => {
+        clientLogger.warn("Reload conversations after incoming message failed", error);
+      });
   },
   markConversationRead: (conversationId) => {
     const conversation = get().conversations.find((item) => item.id === conversationId);
@@ -501,8 +588,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return conversation.id;
   },
   openConversationForGroup: (group) => {
+    rememberGroup(group);
     const existing = get().conversations.find((conversation) => conversation.groupId === group.id);
     if (existing) {
+      set((state) => ({ conversations: state.conversations.map((conversation) => applyGroupToConversation(conversation, group)) }));
       get().setActiveConversationId(existing.id);
       return existing.id;
     }

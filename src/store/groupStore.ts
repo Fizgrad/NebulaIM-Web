@@ -3,8 +3,10 @@ import type { Group } from "../types/group";
 import type { User } from "../types/user";
 import {
   createBridgeGroup,
+  getBridgeGroup,
   joinBridgeGroup,
   leaveBridgeGroup,
+  listBridgeGroups,
   listBridgeGroupMembers
 } from "../api/bridgeApi";
 import { useAuthStore } from "./authStore";
@@ -14,6 +16,7 @@ type GroupState = {
   groups: Group[];
   isLoading: boolean;
   error: string | null;
+  loadGroups: () => Promise<void>;
   loadGroupMembers: (groupId: string) => Promise<User[]>;
   createGroup: (name: string) => Promise<void>;
   joinGroup: (groupId: string) => Promise<void>;
@@ -31,6 +34,18 @@ export const useGroupStore = create<GroupState>((set) => ({
   groups: [],
   isLoading: false,
   error: null,
+  loadGroups: async () => {
+    const settings = useSettingsStore.getState();
+    set({ isLoading: true, error: null });
+    try {
+      const userId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
+      const groups = await listBridgeGroups(settings.bridgeHttpUrl, userId);
+      set({ groups, isLoading: false, error: null });
+    } catch (error) {
+      set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to load groups." });
+      throw error;
+    }
+  },
   loadGroupMembers: async (groupId) => {
     const settings = useSettingsStore.getState();
     set({ isLoading: true, error: null });
@@ -117,13 +132,16 @@ async function joinRealGroup(baseUrl: string, groupId: string): Promise<Group> {
   const userId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
   const numericGroupId = requireNumericId(groupId.trim(), "Group ID");
   await joinBridgeGroup(baseUrl, userId, numericGroupId);
-  const members = await listBridgeGroupMembers(baseUrl, numericGroupId);
+  const [members, groupInfo] = await Promise.all([
+    listBridgeGroupMembers(baseUrl, numericGroupId),
+    getBridgeGroup(baseUrl, numericGroupId).catch(() => null)
+  ]);
   return {
     id: numericGroupId,
-    name: `Group ${numericGroupId}`,
-    ownerId: "",
-    memberCount: members.length,
+    name: groupInfo?.name ?? `Group ${numericGroupId}`,
+    ownerId: groupInfo?.ownerId ?? "",
+    memberCount: groupInfo?.memberCount ?? members.length,
     members,
-    createdAt: Date.now()
+    createdAt: groupInfo?.createdAt ?? Date.now()
   };
 }
