@@ -348,12 +348,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           )
         }
       }));
-      void get()
-        .loadConversations()
-        .then(() => get().loadMessages(conversationId))
-        .catch((error) => {
-          clientLogger.warn("Reload conversations after send failed", error);
-        });
+      await get().loadConversations();
+      await get().loadMessages(conversationId);
     } catch (error) {
       clientLogger.warn("Message send failed", error);
       get().updateMessageStatus(conversationId, message.id, "failed");
@@ -374,12 +370,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           )
         }
       }));
-      void get()
-        .loadConversations()
-        .then(() => get().loadMessages(conversationId))
-        .catch((error) => {
-          clientLogger.warn("Reload conversations after retry failed", error);
-        });
+      await get().loadConversations();
+      await get().loadMessages(conversationId);
     } catch (error) {
       clientLogger.warn("Message retry failed", error);
       get().updateMessageStatus(conversationId, messageId, "failed");

@@ -28,10 +28,6 @@ export function ChatPage() {
       }
     }
 
-    const timer = window.setInterval(() => {
-      void refreshActiveConversation();
-    }, 3000);
-
     function handleVisibilityChange() {
       if (document.visibilityState === "visible") {
         void refreshActiveConversation();
@@ -43,7 +39,6 @@ export function ChatPage() {
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleVisibilityChange);
     };
