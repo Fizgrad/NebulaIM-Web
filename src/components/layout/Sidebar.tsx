@@ -78,8 +78,8 @@ export function Sidebar() {
               to={item.path}
               className={({ isActive }) =>
                 cn(
-                  "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-medium transition",
-                  isActive ? "bg-cyan-300/10 text-cyan-100" : "text-nebula-muted hover:bg-white/[0.06] hover:text-nebula-text"
+                  "flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[10px] font-medium transition",
+                  isActive ? "text-cyan-200" : "text-nebula-muted hover:text-nebula-text"
                 )
               }
             >

@@ -41,14 +41,14 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
 
   if (!conversation) {
     return (
-      <section className={cn("h-full flex-1 bg-nebula-bg", className)}>
+      <section className={cn("h-full min-h-0 flex-1 bg-nebula-bg", className)}>
         <EmptyChatState />
       </section>
     );
   }
 
   return (
-    <section className={cn("h-full min-w-0 flex-1 flex-col bg-nebula-bg", className)}>
+    <section className={cn("h-full min-h-0 min-w-0 flex-1 flex-col bg-nebula-bg", className)}>
       <header className="flex flex-col gap-3 border-b border-nebula-border bg-nebula-panel/[0.54] px-3 py-3 backdrop-blur-xl sm:px-5 sm:py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           {onBack ? (
@@ -91,7 +91,7 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
         </div>
       </header>
 
-      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:space-y-5 sm:px-5 sm:py-6">
+      <div ref={scrollRef} className="chat-scroll-area min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:space-y-5 sm:px-5 sm:py-6">
         <div className="mx-auto w-fit rounded-full border border-nebula-border bg-white/[0.04] px-3 py-1 text-xs text-nebula-muted">
           Today
         </div>

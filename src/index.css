@@ -42,6 +42,13 @@ body {
   min-height: 100vh;
 }
 
+.chat-shell-main {
+  height: 100vh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding-bottom: 0;
+}
+
 .app-shell-main {
   padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
 }
@@ -53,12 +60,23 @@ body {
 
 .chat-viewport {
   height: calc(100vh - 4.5rem - env(safe-area-inset-bottom));
+  overscroll-behavior: none;
 }
 
 @supports (height: 100dvh) {
+  .chat-shell-main {
+    height: 100dvh;
+  }
+
   .chat-viewport {
     height: calc(100dvh - 4.5rem - env(safe-area-inset-bottom));
   }
+}
+
+.chat-scroll-area {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 @media (min-width: 768px) {
