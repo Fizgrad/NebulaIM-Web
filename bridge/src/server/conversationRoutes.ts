@@ -9,6 +9,7 @@ import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
 import { getMysqlPool, hasMysqlConfig } from "./mysqlPool.js";
+import { markMessageConversationRead } from "./messageRoutes.js";
 
 type CommonResponse = {
   code: number;
@@ -41,6 +42,11 @@ type ListConversationsResponse = {
 type GroupNameRow = RowDataPacket & {
   id: string;
   group_name: string;
+};
+
+type UnreadCountRow = RowDataPacket & {
+  conversation_id: string;
+  unread_count: number;
 };
 
 type ConversationUnary<TResponse> = (
@@ -109,7 +115,7 @@ export function createConversationRouter(): Router {
         return;
       }
 
-      const conversations = await attachGroupNames(response.conversations ?? []);
+      const conversations = await enrichConversations(response.conversations ?? [], parsed.data.userId);
       res.json({ ok: true, conversations, response: response.response });
     } catch (error) {
       sendRpcError(res, "ConversationService.ListConversations failed.", error);
@@ -117,7 +123,7 @@ export function createConversationRouter(): Router {
   });
 
   router.post("/:conversationId/read", async (req, res) => {
-    await handleConversationAction(req, res, "MarkConversationRead", {});
+    await handleMarkConversationRead(req, res);
   });
 
   router.delete("/:conversationId", async (req, res) => {
@@ -143,6 +149,28 @@ export function createConversationRouter(): Router {
   });
 
   return router;
+}
+
+async function handleMarkConversationRead(req: express.Request, res: express.Response) {
+  const parsedConversation = numericIdSchema.safeParse(req.params.conversationId);
+  const parsedBody = conversationActionSchema.safeParse(req.body);
+  if (!parsedConversation.success || !parsedBody.success) {
+    sendValidationError(res, "User ID and conversation ID must be numeric.");
+    return;
+  }
+
+  try {
+    const response = await markMessageConversationRead(parsedBody.data.userId, parsedConversation.data, requestId(req));
+
+    if (!isOk(response)) {
+      sendConversationError(res, response);
+      return;
+    }
+
+    res.json({ ok: true, response });
+  } catch (error) {
+    sendRpcError(res, "MessageService.MarkConversationRead failed.", error);
+  }
 }
 
 async function handleConversationAction(
@@ -178,6 +206,17 @@ async function handleConversationAction(
   }
 }
 
+async function enrichConversations(conversations: ConversationInfo[], userId: string) {
+  const [withGroupNames, unreadCounts] = await Promise.all([
+    attachGroupNames(conversations),
+    calculateUnreadCounts(conversations, userId)
+  ]);
+  return withGroupNames.map((conversation) => ({
+    ...conversation,
+    unreadCount: Number(conversation.unreadCount ?? 0) <= 0 ? 0 : unreadCounts.get(String(conversation.conversationId)) ?? 0
+  }));
+}
+
 async function attachGroupNames(conversations: ConversationInfo[]) {
   const groupIds = Array.from(
     new Set(
@@ -203,6 +242,38 @@ async function attachGroupNames(conversations: ConversationInfo[]) {
     logger.warn("Conversation group name lookup failed.", { detail: error });
     return conversations;
   }
+}
+
+async function calculateUnreadCounts(conversations: ConversationInfo[], userId: string) {
+  const conversationIds = Array.from(
+    new Set(
+      conversations
+        .map((conversation) => String(conversation.conversationId ?? ""))
+        .filter((conversationId) => conversationId !== "" && numericIdSchema.safeParse(conversationId).success)
+    )
+  );
+  const counts = new Map<string, number>();
+  if (conversationIds.length === 0 || !hasMysqlConfig()) return counts;
+
+  try {
+    const placeholders = conversationIds.map(() => "?").join(",");
+    const [rows] = await getMysqlPool().execute<UnreadCountRow[]>(
+      `SELECT m.conversation_id, COUNT(*) AS unread_count
+       FROM messages m
+       LEFT JOIN message_receipts r ON r.message_id = m.message_id AND r.user_id = ?
+       WHERE m.conversation_id IN (${placeholders})
+         AND m.from_user_id <> ?
+         AND m.recalled = 0
+         AND COALESCE(r.read_at, 0) = 0
+       GROUP BY m.conversation_id`,
+      [userId, ...conversationIds, userId]
+    );
+    rows.forEach((row) => counts.set(String(row.conversation_id), Number(row.unread_count ?? 0)));
+  } catch (error) {
+    logger.warn("Conversation unread count lookup failed.", { detail: error });
+    conversations.forEach((conversation) => counts.set(String(conversation.conversationId), Number(conversation.unreadCount ?? 0)));
+  }
+  return counts;
 }
 
 function invokeConversation<TResponse>(method: ConversationMethod, request: Record<string, unknown>) {
