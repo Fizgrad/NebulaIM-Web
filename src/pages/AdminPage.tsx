@@ -67,8 +67,8 @@ export function AdminPage() {
               Home
             </Button>
           </Link>
-          <Link to="/dashboard">
-            <Button variant="secondary">Dashboard</Button>
+          <Link to="/app/chat">
+            <Button variant="primary">Open Client</Button>
           </Link>
         </div>
       </header>

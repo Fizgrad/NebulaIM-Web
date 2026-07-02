@@ -19,11 +19,11 @@ const statusIcon: Record<MessageStatus, JSX.Element> = {
 };
 
 export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
-  const senderName = `User ${message.fromUserId}`;
+  const senderName = message.senderName ?? `User ${message.fromUserId}`;
 
   return (
     <div className={cn("flex gap-3", message.isMine ? "justify-end" : "justify-start")}>
-      {!message.isMine ? <Avatar name={senderName} size="sm" /> : null}
+      {!message.isMine ? <Avatar name={senderName} src={message.senderAvatar} size="sm" /> : null}
       <div className={cn("max-w-[78%] md:max-w-[62%]", message.isMine ? "items-end" : "items-start")}>
         <div
           className={cn(

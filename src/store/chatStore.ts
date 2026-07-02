@@ -11,6 +11,9 @@ import { useSettingsStore } from "./settingsStore";
 import { useContactStore } from "./contactStore";
 import { clientLogger } from "../services/clientLogger";
 import {
+  type BridgeMessageInfo,
+  getBridgeUserInfo,
+  listBridgeConversationMessages,
   listBridgeConversations,
   markBridgeConversationRead,
   sendBridgeGroupMessage,
@@ -26,6 +29,7 @@ type ChatState = {
   gatewayStatus: GatewayStatus;
   setActiveConversationId: (conversationId: string | null) => void;
   loadConversations: () => Promise<void>;
+  loadMessages: (conversationId: string) => Promise<void>;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   retryMessage: (conversationId: string, messageId: string) => Promise<void>;
   receiveMessage: (message: Message) => void;
@@ -49,6 +53,14 @@ function isNumericId(value?: string): value is string {
 
 function directConversationId(userId: string) {
   return `direct-${userId}`;
+}
+
+function knownUser(userId: string) {
+  return useContactStore.getState().contacts.find((contact) => contact.id === userId) ?? null;
+}
+
+function directConversationTitle(userId: string) {
+  return knownUser(userId)?.nickname ?? `User ${userId}`;
 }
 
 function conversationIdForIncoming(message: Message) {
@@ -90,6 +102,25 @@ function mergeBackendConversations(localConversations: Conversation[], backendCo
   return sortConversations([...merged, ...localOnly]);
 }
 
+function applyUserToConversation(conversation: Conversation, user: User): Conversation {
+  if (conversation.type !== "single" || conversation.targetUserId !== user.id) return conversation;
+  return {
+    ...conversation,
+    title: user.nickname || user.username || conversation.title,
+    avatar: user.avatar ?? conversation.avatar,
+    online: user.status === "online"
+  };
+}
+
+function applyUserToMessage(message: Message, user: User): Message {
+  if (message.fromUserId !== user.id) return message;
+  return {
+    ...message,
+    senderName: user.nickname || user.username || message.senderName,
+    senderAvatar: user.avatar ?? message.senderAvatar
+  };
+}
+
 function mapBackendConversation(item: BackendConversationInfo, friendById: Map<string, User>): Conversation {
   const groupId = item.groupId && item.groupId !== "0" ? item.groupId : undefined;
   const peerUserId = item.peerUserId && item.peerUserId !== "0" ? item.peerUserId : undefined;
@@ -112,6 +143,54 @@ function mapBackendConversation(item: BackendConversationInfo, friendById: Map<s
   };
 }
 
+function messageStatusFromBackend(status: number, isMine: boolean): MessageStatus {
+  if (status === 4) return "failed";
+  if (status === 5) return "read";
+  if (!isMine) return "delivered";
+  if (status === 1) return "sent";
+  return "delivered";
+}
+
+function mapBridgeMessage(item: BridgeMessageInfo, conversationId: string, currentUserId: string): Message {
+  const groupId = item.groupId && item.groupId !== "0" ? item.groupId : undefined;
+  const toUserId = item.toUserId && item.toUserId !== "0" ? item.toUserId : undefined;
+  const isMine = item.fromUserId === currentUserId;
+  const sender = isMine ? useAuthStore.getState().user : knownUser(item.fromUserId);
+  return {
+    id: item.messageId,
+    conversationId,
+    fromUserId: item.fromUserId,
+    toUserId,
+    groupId,
+    senderName: sender?.nickname,
+    senderAvatar: sender?.avatar,
+    content: item.recalled ? "This message was recalled." : item.content,
+    contentType: "text",
+    status: messageStatusFromBackend(item.status, isMine),
+    createdAt: Number(item.createdAt || Date.now()),
+    isMine
+  };
+}
+
+function isLikelyOptimisticDuplicate(existing: Message, incoming: Message) {
+  return (
+    existing.id.startsWith("local_") &&
+    existing.fromUserId === incoming.fromUserId &&
+    existing.toUserId === incoming.toUserId &&
+    existing.groupId === incoming.groupId &&
+    existing.content === incoming.content &&
+    Math.abs(existing.createdAt - incoming.createdAt) <= 5 * 60 * 1000
+  );
+}
+
+function mergeMessages(existing: Message[], incoming: Message[]) {
+  const incomingIds = new Set(incoming.map((message) => message.id));
+  const filteredExisting = existing.filter(
+    (message) => !incomingIds.has(message.id) && !incoming.some((incomingMessage) => isLikelyOptimisticDuplicate(message, incomingMessage))
+  );
+  return [...filteredExisting, ...incoming].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+}
+
 async function deliverMessage(conversation: Conversation, message: Message, updateStatus: (status: MessageStatus) => void) {
   const settings = useSettingsStore.getState();
   const userId = useAuthStore.getState().user?.id;
@@ -125,16 +204,19 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
     if (!isNumericId(conversation.groupId)) {
       throw new Error("Group ID must be numeric.");
     }
-    await sendBridgeGroupMessage(settings.bridgeHttpUrl, userId, conversation.groupId, message.content, sequenceId);
+    const result = await sendBridgeGroupMessage(settings.bridgeHttpUrl, userId, conversation.groupId, message.content, sequenceId);
+    updateStatus("sent");
+    updateStatus("delivered");
+    return result;
   } else {
     if (!isNumericId(conversation.targetUserId)) {
       throw new Error("Recipient user_id must be numeric.");
     }
-    await sendBridgeSingleMessage(settings.bridgeHttpUrl, userId, conversation.targetUserId, message.content, sequenceId);
+    const result = await sendBridgeSingleMessage(settings.bridgeHttpUrl, userId, conversation.targetUserId, message.content, sequenceId);
+    updateStatus("sent");
+    updateStatus("delivered");
+    return result;
   }
-
-  updateStatus("sent");
-  updateStatus("delivered");
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -148,7 +230,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   setActiveConversationId: (activeConversationId) => {
     set({ activeConversationId });
-    if (activeConversationId) get().markConversationRead(activeConversationId);
+    if (activeConversationId) {
+      get().markConversationRead(activeConversationId);
+      void get().loadMessages(activeConversationId).catch((error) => {
+        clientLogger.warn("Load messages failed", error);
+      });
+    }
   },
   loadConversations: async () => {
     const settings = useSettingsStore.getState();
@@ -164,6 +251,53 @@ export const useChatStore = create<ChatState>((set, get) => ({
         activeConversationId: activeStillExists ? state.activeConversationId : null
       };
     });
+    const missingPeerIds = conversations
+      .map((item) => (item.peerUserId && item.peerUserId !== "0" && !friendById.has(item.peerUserId) ? item.peerUserId : ""))
+      .filter((peerId): peerId is string => Boolean(peerId));
+    for (const peerId of Array.from(new Set(missingPeerIds))) {
+      void getBridgeUserInfo(settings.bridgeHttpUrl, peerId)
+        .then((user) => {
+          set((state) => ({ conversations: state.conversations.map((conversation) => applyUserToConversation(conversation, user)) }));
+        })
+        .catch((error) => {
+          clientLogger.warn("Resolve conversation user failed", error);
+        });
+    }
+  },
+  loadMessages: async (conversationId) => {
+    const conversation = get().conversations.find((item) => item.id === conversationId);
+    const settings = useSettingsStore.getState();
+    const userId = useAuthStore.getState().user?.id;
+    if (!conversation?.backendConversationId || !isNumericId(userId)) return;
+
+    const history = await listBridgeConversationMessages(settings.bridgeHttpUrl, userId, conversation.backendConversationId);
+    const messages = history.map((item) => mapBridgeMessage(item, conversation.id, userId));
+    set((state) => ({
+      messagesByConversationId: {
+        ...state.messagesByConversationId,
+        [conversation.id]: mergeMessages(state.messagesByConversationId[conversation.id] ?? [], messages)
+      }
+    }));
+    const missingSenderIds = Array.from(
+      new Set(messages.map((message) => message.fromUserId).filter((fromUserId) => fromUserId !== userId && !knownUser(fromUserId)))
+    );
+    for (const senderId of missingSenderIds) {
+      void getBridgeUserInfo(settings.bridgeHttpUrl, senderId)
+        .then((user) => {
+          set((state) => ({
+            conversations: state.conversations.map((item) => applyUserToConversation(item, user)),
+            messagesByConversationId: Object.fromEntries(
+              Object.entries(state.messagesByConversationId).map(([key, values]) => [
+                key,
+                values.map((message) => applyUserToMessage(message, user))
+              ])
+            )
+          }));
+        })
+        .catch((error) => {
+          clientLogger.warn("Resolve message sender failed", error);
+        });
+    }
   },
   sendMessage: async (conversationId, content) => {
     const trimmed = content.trim();
@@ -181,6 +315,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       fromUserId: userId,
       toUserId: conversation.targetUserId,
       groupId: conversation.groupId,
+      senderName: useAuthStore.getState().user?.nickname,
+      senderAvatar: useAuthStore.getState().user?.avatar,
       content: trimmed,
       contentType: "text",
       status: "sending",
@@ -203,10 +339,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
-      await deliverMessage(conversation, message, (status) => get().updateMessageStatus(conversationId, message.id, status));
-      void get().loadConversations().catch((error) => {
-        clientLogger.warn("Reload conversations after send failed", error);
-      });
+      const result = await deliverMessage(conversation, message, (status) => get().updateMessageStatus(conversationId, message.id, status));
+      set((state) => ({
+        messagesByConversationId: {
+          ...state.messagesByConversationId,
+          [conversationId]: (state.messagesByConversationId[conversationId] ?? []).map((item) =>
+            item.id === message.id ? { ...item, id: result.messageId || item.id, createdAt: result.serverTimestamp || item.createdAt } : item
+          )
+        }
+      }));
+      void get()
+        .loadConversations()
+        .then(() => get().loadMessages(conversationId))
+        .catch((error) => {
+          clientLogger.warn("Reload conversations after send failed", error);
+        });
     } catch (error) {
       clientLogger.warn("Message send failed", error);
       get().updateMessageStatus(conversationId, message.id, "failed");
@@ -218,19 +365,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!conversation || !message) return;
     get().updateMessageStatus(conversationId, messageId, "sending");
     try {
-      await deliverMessage(conversation, message, (status) => get().updateMessageStatus(conversationId, messageId, status));
-      void get().loadConversations().catch((error) => {
-        clientLogger.warn("Reload conversations after retry failed", error);
-      });
+      const result = await deliverMessage(conversation, message, (status) => get().updateMessageStatus(conversationId, messageId, status));
+      set((state) => ({
+        messagesByConversationId: {
+          ...state.messagesByConversationId,
+          [conversationId]: (state.messagesByConversationId[conversationId] ?? []).map((item) =>
+            item.id === messageId ? { ...item, id: result.messageId || item.id, createdAt: result.serverTimestamp || item.createdAt } : item
+          )
+        }
+      }));
+      void get()
+        .loadConversations()
+        .then(() => get().loadMessages(conversationId))
+        .catch((error) => {
+          clientLogger.warn("Reload conversations after retry failed", error);
+        });
     } catch (error) {
       clientLogger.warn("Message retry failed", error);
       get().updateMessageStatus(conversationId, messageId, "failed");
     }
   },
   receiveMessage: (message) => {
+    const peerUser = !message.groupId ? knownUser(message.fromUserId) : null;
     set((state) => {
       const conversationId = message.conversationId || conversationIdForIncoming(message);
-      const normalizedMessage = { ...message, conversationId };
+      const normalizedMessage = {
+        ...message,
+        conversationId,
+        senderName: peerUser?.nickname ?? message.senderName,
+        senderAvatar: peerUser?.avatar ?? message.senderAvatar
+      };
       const existingConversation = state.conversations.find((conversation) => conversation.id === conversationId);
       const isActive = state.activeConversationId === conversationId;
       let conversations: Conversation[];
@@ -249,7 +413,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const incomingConversation: Conversation = {
           id: conversationId,
           type: message.groupId ? "group" : "single",
-          title: message.groupId ? `Group ${message.groupId}` : `User ${message.fromUserId}`,
+          title: message.groupId ? `Group ${message.groupId}` : peerUser?.nickname ?? directConversationTitle(message.fromUserId),
+          avatar: peerUser?.avatar,
           online: true,
           lastMessage: message.content,
           lastMessageAt: message.createdAt,
@@ -267,6 +432,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
         conversations: sortConversations(conversations)
       };
     });
+    if (!message.groupId) {
+      const conversationId = message.conversationId || conversationIdForIncoming(message);
+      const applyResolvedUser = (user: User) => {
+        set((state) => ({
+          conversations: state.conversations.map((conversation) => applyUserToConversation(conversation, user)),
+          messagesByConversationId: Object.fromEntries(
+            Object.entries(state.messagesByConversationId).map(([key, messages]) => [
+              key,
+              messages.map((item) => applyUserToMessage(item, user))
+            ])
+          )
+        }));
+      };
+      if (peerUser) {
+        applyResolvedUser(peerUser);
+      } else {
+        void getBridgeUserInfo(useSettingsStore.getState().bridgeHttpUrl, message.fromUserId)
+          .then(applyResolvedUser)
+          .catch((error) => {
+            clientLogger.warn("Resolve incoming message user failed", error);
+          });
+      }
+      void get()
+        .loadConversations()
+        .then(() => get().loadMessages(conversationId))
+        .catch((error) => {
+          clientLogger.warn("Reload conversations after incoming message failed", error);
+        });
+    }
   },
   markConversationRead: (conversationId) => {
     const conversation = get().conversations.find((item) => item.id === conversationId);

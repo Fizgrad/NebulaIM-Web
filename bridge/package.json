@@ -15,6 +15,7 @@
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",
+    "mysql2": "^3.22.5",
     "zod": "latest"
   },
   "devDependencies": {

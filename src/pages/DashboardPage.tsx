@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, Database, KeyRound, Link2, Radio, RefreshCw, Server, Shield, TrendingUp } from "lucide-react";
+import { Activity, ArrowLeft, Database, KeyRound, Link2, Radio, RefreshCw, Server, Shield, TrendingUp } from "lucide-react";
 import type { BridgeHealth, BridgeInfo } from "../types/bridge";
 import type { DashboardRuntime } from "../api/dashboardApi";
 import { getDashboardRuntime } from "../api/dashboardApi";
@@ -272,7 +272,10 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
         <Logo />
         <div className="flex gap-2">
           <Link to="/">
-            <Button variant="ghost">Home</Button>
+            <Button variant="ghost">
+              <ArrowLeft className="h-4 w-4" />
+              Home
+            </Button>
           </Link>
           <Link to="/app/chat">
             <Button variant="primary">Open Client</Button>

@@ -8,6 +8,8 @@ export type Message = {
   fromUserId: string;
   toUserId?: string;
   groupId?: string;
+  senderName?: string;
+  senderAvatar?: string;
   content: string;
   contentType: MessageContentType;
   status: MessageStatus;

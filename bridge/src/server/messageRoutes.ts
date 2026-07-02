@@ -2,6 +2,7 @@ import type { Router } from "express";
 import express from "express";
 import * as grpc from "@grpc/grpc-js";
 import protoLoader from "@grpc/proto-loader";
+import mysql, { type Pool, type RowDataPacket } from "mysql2/promise";
 import path from "node:path";
 import { z } from "zod";
 import { config } from "../config.js";
@@ -37,6 +38,11 @@ type MessageMethod = "SendSingleMessage" | "SendGroupMessage" | "AckMessage";
 type MessageServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => MessageGrpcClient;
 
 const numericIdSchema = z.string().regex(/^\d+$/, "ID must be numeric.");
+const historyQuerySchema = z.object({
+  userId: numericIdSchema,
+  before: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50)
+});
 
 const sendSingleSchema = z.object({
   fromUserId: numericIdSchema,
@@ -53,9 +59,68 @@ const sendGroupSchema = z.object({
 });
 
 let cachedClient: MessageGrpcClient | null = null;
+let cachedPool: Pool | null = null;
+
+type MessageRow = RowDataPacket & {
+  message_id: string;
+  conversation_id: string;
+  from_user_id: string;
+  to_user_id: string;
+  group_id: string;
+  message_type: number;
+  content: string;
+  status: number;
+  recalled: number;
+  recalled_at: string;
+  created_at: string;
+};
 
 export function createMessageRouter(): Router {
   const router = express.Router();
+
+  router.get("/conversations/:conversationId", async (req, res) => {
+    const parsed = historyQuerySchema.safeParse(req.query);
+    const conversationId = String(req.params.conversationId ?? "");
+    if (!numericIdSchema.safeParse(conversationId).success || !parsed.success) {
+      sendValidationError(res, parsed.success ? "Conversation ID must be numeric." : parsed.error.issues[0]?.message ?? "Invalid message history query.");
+      return;
+    }
+
+    try {
+      const pool = getMysqlPool();
+      const [conversationRows] = await pool.execute<RowDataPacket[]>(
+        "SELECT conversation_id FROM conversations WHERE conversation_id = ? AND owner_user_id = ? AND deleted = 0 LIMIT 1",
+        [conversationId, parsed.data.userId]
+      );
+      if (conversationRows.length === 0) {
+        res.status(404).json({
+          ok: false,
+          error: {
+            code: "CONVERSATION_NOT_FOUND",
+            message: "Conversation is not available for this user."
+          }
+        });
+        return;
+      }
+
+      const before = parsed.data.before ?? Date.now();
+      const limit = parsed.data.limit;
+      const [rows] = await pool.query<MessageRow[]>(
+        `SELECT message_id, conversation_id, from_user_id, to_user_id, group_id, message_type, content, status, recalled, recalled_at, created_at
+         FROM messages
+         WHERE conversation_id = ${conversationId} AND created_at <= ${before}
+         ORDER BY created_at DESC, message_id DESC
+         LIMIT ${limit}`
+      );
+
+      res.json({
+        ok: true,
+        messages: rows.reverse().map(toBridgeMessage)
+      });
+    } catch (error) {
+      sendHistoryError(res, error);
+    }
+  });
 
   router.post("/single", async (req, res) => {
     const parsed = sendSingleSchema.safeParse(req.body);
@@ -161,6 +226,42 @@ function getMessageClient(): MessageGrpcClient {
   return cachedClient;
 }
 
+function getMysqlPool(): Pool {
+  if (cachedPool) return cachedPool;
+  if (!config.mysqlHost || !config.mysqlUser || !config.mysqlDatabase) {
+    throw new Error("MySQL history connection is not configured.");
+  }
+
+  cachedPool = mysql.createPool({
+    host: config.mysqlHost,
+    port: config.mysqlPort,
+    user: config.mysqlUser,
+    password: config.mysqlPassword,
+    database: config.mysqlDatabase,
+    waitForConnections: true,
+    connectionLimit: config.mysqlConnectionLimit,
+    supportBigNumbers: true,
+    bigNumberStrings: true
+  });
+  return cachedPool;
+}
+
+function toBridgeMessage(row: MessageRow) {
+  return {
+    messageId: String(row.message_id),
+    conversationId: String(row.conversation_id),
+    fromUserId: String(row.from_user_id),
+    toUserId: String(row.to_user_id),
+    groupId: String(row.group_id),
+    contentType: row.message_type,
+    content: row.content,
+    status: row.status,
+    recalled: Boolean(row.recalled),
+    recalledAt: String(row.recalled_at ?? "0"),
+    createdAt: String(row.created_at)
+  };
+}
+
 function requestId(req: express.Request, prefix: string) {
   return req.header("x-request-id") ?? createId(prefix);
 }
@@ -196,6 +297,17 @@ function sendRpcError(res: express.Response, message: string, error: unknown) {
     error: {
       code: "MESSAGE_SERVICE_UNAVAILABLE",
       message: error instanceof Error ? error.message : message
+    }
+  });
+}
+
+function sendHistoryError(res: express.Response, error: unknown) {
+  logger.warn("Message history query failed.", { detail: error });
+  res.status(503).json({
+    ok: false,
+    error: {
+      code: "MESSAGE_HISTORY_UNAVAILABLE",
+      message: error instanceof Error ? error.message : "Message history is unavailable."
     }
   });
 }
