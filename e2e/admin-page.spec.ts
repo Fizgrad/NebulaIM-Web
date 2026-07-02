@@ -6,5 +6,6 @@ test("admin console renders token-gated controls", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "NebulaIM Admin" })).toBeVisible();
   await expect(page.getByLabel("Admin Token")).toBeVisible();
   await expect(page.getByRole("button", { name: /connect/i })).toBeVisible();
-  await expect(page.getByText("Connect AdminService")).toBeVisible();
+  await expect(page.getByText("Connect AdminService")).toHaveCount(0);
+  await expect(page.getByText("Dependency Health")).toHaveCount(0);
 });

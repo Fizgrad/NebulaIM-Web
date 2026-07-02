@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { BarChart3, LogOut, MessageSquare, Settings, UserRound, UsersRound, Network, ShieldCheck } from "lucide-react";
+import { LogOut, MessageSquare, Settings, UserRound, UsersRound, Network } from "lucide-react";
 import { Logo } from "../brand/Logo";
 import { Avatar } from "../common/Avatar";
 import { Button } from "../common/Button";
@@ -10,8 +10,6 @@ const navItems = [
   { label: "Chat", path: "/app/chat", icon: MessageSquare },
   { label: "Contacts", path: "/app/contacts", icon: UserRound },
   { label: "Groups", path: "/app/groups", icon: UsersRound },
-  { label: "Dashboard", path: "/app/dashboard", icon: BarChart3 },
-  { label: "Admin", path: "/admin", icon: ShieldCheck },
   { label: "Profile", path: "/app/profile", icon: Network },
   { label: "Settings", path: "/app/settings", icon: Settings }
 ];
