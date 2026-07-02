@@ -41,7 +41,7 @@ export function ConversationList() {
   }
 
   return (
-    <section className="flex h-screen w-full flex-col border-r border-nebula-border bg-nebula-panel/62 backdrop-blur-xl md:w-[360px]">
+    <section className="flex h-screen w-full flex-col border-r border-nebula-border bg-nebula-panel/[0.62] backdrop-blur-xl md:w-[360px]">
       <div className="border-b border-nebula-border p-4">
         <div className="mb-4">
           <h2 className="text-base font-semibold text-nebula-text">Messages</h2>

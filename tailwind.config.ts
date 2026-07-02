@@ -6,25 +6,26 @@ export default {
     extend: {
       colors: {
         nebula: {
-          bg: "#070A13",
-          panel: "#0F172A",
-          panelLight: "#111827",
-          primary: "#7C3AED",
-          secondary: "#06B6D4",
-          accent: "#3B82F6",
-          text: "#F8FAFC",
-          muted: "#94A3B8",
-          border: "rgba(148, 163, 184, 0.18)"
+          bg: "rgb(var(--nebula-bg) / <alpha-value>)",
+          panel: "rgb(var(--nebula-panel) / <alpha-value>)",
+          panelLight: "rgb(var(--nebula-panel-light) / <alpha-value>)",
+          primary: "rgb(var(--nebula-primary) / <alpha-value>)",
+          secondary: "rgb(var(--nebula-secondary) / <alpha-value>)",
+          accent: "rgb(var(--nebula-accent) / <alpha-value>)",
+          text: "rgb(var(--nebula-text) / <alpha-value>)",
+          muted: "rgb(var(--nebula-muted) / <alpha-value>)",
+          border: "rgb(var(--nebula-border) / var(--nebula-border-alpha))"
         }
       },
       boxShadow: {
-        glow: "0 18px 80px rgba(6, 182, 212, 0.13)",
-        panel: "0 16px 48px rgba(0, 0, 0, 0.28)"
+        glow: "var(--nebula-shadow-glow)",
+        panel: "var(--nebula-shadow-panel)"
       },
       backgroundImage: {
         "nebula-grid":
-          "linear-gradient(rgba(148,163,184,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.06) 1px, transparent 1px)",
-        "primary-gradient": "linear-gradient(135deg, #7C3AED 0%, #3B82F6 54%, #06B6D4 100%)"
+          "linear-gradient(rgb(var(--nebula-grid) / 0.08) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--nebula-grid) / 0.08) 1px, transparent 1px)",
+        "primary-gradient":
+          "linear-gradient(135deg, rgb(var(--nebula-primary)) 0%, rgb(var(--nebula-accent)) 54%, rgb(var(--nebula-secondary)) 100%)"
       }
     }
   },

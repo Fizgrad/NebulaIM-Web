@@ -282,7 +282,7 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
 
       <main className="mx-auto max-w-7xl px-5 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-semibold text-white">NebulaIM Dashboard</h1>
+          <h1 className="text-3xl font-semibold text-nebula-text">NebulaIM Dashboard</h1>
           <p className="mt-2 text-sm text-nebula-muted">Bridge health, Gateway connectivity and runtime metrics for NebulaIM.</p>
         </div>
         {dashboardContent}

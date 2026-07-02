@@ -21,7 +21,7 @@ export function Sidebar() {
   const { user, logout } = useAuthStore();
 
   return (
-    <aside className="flex h-screen w-[76px] shrink-0 flex-col border-r border-nebula-border bg-nebula-panel/72 px-3 py-4 backdrop-blur-xl lg:w-64 lg:px-4">
+    <aside className="flex h-screen w-[76px] shrink-0 flex-col border-r border-nebula-border bg-nebula-panel/[0.72] px-3 py-4 backdrop-blur-xl lg:w-64 lg:px-4">
       <Logo compact className="justify-center lg:hidden" />
       <Logo className="hidden lg:flex" />
 

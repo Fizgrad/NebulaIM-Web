@@ -14,7 +14,7 @@ export function LoginPage() {
         </Link>
         <Card className="p-6">
           <div className="mb-6">
-            <h1 className="text-2xl font-semibold text-white">Sign in to NebulaIM</h1>
+            <h1 className="text-2xl font-semibold text-nebula-text">Sign in to NebulaIM</h1>
             <p className="mt-2 text-sm text-nebula-muted">
               Sign in with a NebulaIM account. Production mode connects through the Web Bridge to the C++ Gateway.
             </p>

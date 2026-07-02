@@ -77,7 +77,7 @@ export function AdminPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <Badge tone="violet">AdminService gRPC via Bridge</Badge>
-            <h1 className="mt-4 text-3xl font-semibold text-white">NebulaIM Admin</h1>
+            <h1 className="mt-4 text-3xl font-semibold text-nebula-text">NebulaIM Admin</h1>
             <p className="mt-2 max-w-2xl text-sm text-nebula-muted">
               Token-protected operations for health checks, system stats, outbox status, Kafka lag and bounded cleanup. AdminService
               authorizes each RPC by scope through gRPC metadata.

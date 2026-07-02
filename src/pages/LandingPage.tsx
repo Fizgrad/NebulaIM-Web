@@ -57,7 +57,7 @@ export function LandingPage() {
         <section className="mx-auto grid max-w-7xl gap-12 px-5 pb-16 pt-10 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:pt-20">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
             <Badge tone="cyan">A modern web client for NebulaIM</Badge>
-            <h1 className="mt-7 max-w-4xl text-5xl font-semibold tracking-normal text-white md:text-7xl">NebulaIM</h1>
+            <h1 className="mt-7 max-w-4xl text-5xl font-semibold tracking-normal text-nebula-text md:text-7xl">NebulaIM</h1>
             <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-300">
               A modern distributed instant messaging system built with C++17, epoll, Reactor, gRPC, Kafka, Redis and MySQL.
             </p>
@@ -127,7 +127,7 @@ export function LandingPage() {
         <section id="features" className="mx-auto max-w-7xl px-5 py-12">
           <div className="mb-7 flex items-end justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-semibold text-white">Core Capabilities</h2>
+              <h2 className="text-2xl font-semibold text-nebula-text">Core Capabilities</h2>
               <p className="mt-2 text-sm text-nebula-muted">
                 Login, sessions, direct chat, Gateway heartbeat, offline pull and ACK status run through the Bridge `/ws` Gateway path.
               </p>
@@ -152,7 +152,7 @@ export function LandingPage() {
         <section id="architecture" className="mx-auto max-w-7xl px-5 py-12">
           <Card className="p-5">
             <div className="mb-6">
-              <h2 className="text-2xl font-semibold text-white">Architecture Highlights</h2>
+              <h2 className="text-2xl font-semibold text-nebula-text">Architecture Highlights</h2>
               <p className="mt-2 text-sm text-nebula-muted">
                 Browser clients use the Bridge `/ws` endpoint, which proxies the same NebulaIM Packet protocol as native TCP clients.
               </p>

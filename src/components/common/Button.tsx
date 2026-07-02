@@ -14,13 +14,13 @@ const variants: Record<ButtonVariant, string> = {
   primary:
     "border-transparent bg-primary-gradient text-white shadow-glow hover:brightness-110 focus-visible:ring-cyan-300/60",
   secondary:
-    "border-nebula-border bg-white/8 text-nebula-text hover:bg-white/12 focus-visible:ring-cyan-300/40",
+    "border-nebula-border bg-white/[0.08] text-nebula-text hover:bg-white/[0.12] focus-visible:ring-cyan-300/40",
   ghost:
-    "border-transparent bg-transparent text-nebula-muted hover:bg-white/8 hover:text-nebula-text focus-visible:ring-cyan-300/30",
+    "border-transparent bg-transparent text-nebula-muted hover:bg-white/[0.08] hover:text-nebula-text focus-visible:ring-cyan-300/30",
   danger:
-    "border-red-400/20 bg-red-500/10 text-red-200 hover:bg-red-500/16 focus-visible:ring-red-300/40",
+    "border-red-400/20 bg-red-500/10 text-red-200 hover:bg-red-500/[0.16] focus-visible:ring-red-300/40",
   outline:
-    "border-nebula-border bg-transparent text-nebula-text hover:border-cyan-300/40 hover:bg-cyan-300/8 focus-visible:ring-cyan-300/40"
+    "border-nebula-border bg-transparent text-nebula-text hover:border-cyan-300/40 hover:bg-cyan-300/[0.08] focus-visible:ring-cyan-300/40"
 };
 
 const sizes: Record<ButtonSize, string> = {

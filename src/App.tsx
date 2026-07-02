@@ -10,9 +10,19 @@ export default function App() {
   const ensureFreshToken = useAuthStore((state) => state.ensureFreshToken);
 
   useEffect(() => {
-    const prefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
-    const useLight = theme === "light" || (theme === "system" && prefersLight);
-    document.documentElement.classList.toggle("light", useLight);
+    const media = window.matchMedia("(prefers-color-scheme: light)");
+    const applyTheme = () => {
+      const useLight = theme === "light" || (theme === "system" && media.matches);
+      document.documentElement.classList.toggle("light", useLight);
+      document.documentElement.classList.toggle("dark", !useLight);
+      document.documentElement.dataset.theme = useLight ? "light" : "dark";
+    };
+
+    applyTheme();
+    if (theme !== "system") return;
+
+    media.addEventListener("change", applyTheme);
+    return () => media.removeEventListener("change", applyTheme);
   }, [theme]);
 
   useEffect(() => {
