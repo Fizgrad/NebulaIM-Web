@@ -40,12 +40,26 @@ export function createHttpServer(config: BridgeConfig): http.Server {
   app.use("/api/admin", createAdminRouter());
 
   if (config.webStaticDir && fs.existsSync(path.join(config.webStaticDir, "index.html"))) {
-    app.use(express.static(config.webStaticDir, { index: false }));
+    app.use(
+      express.static(config.webStaticDir, {
+        index: false,
+        setHeaders: (res, filePath) => {
+          if (path.basename(filePath) === "index.html") {
+            res.setHeader("Cache-Control", "no-cache");
+            return;
+          }
+          if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
+        }
+      })
+    );
     app.use((req, res, next) => {
       if (req.method !== "GET" || req.path.startsWith("/api/")) {
         next();
         return;
       }
+      res.setHeader("Cache-Control", "no-cache");
       res.sendFile(path.join(config.webStaticDir, "index.html"));
     });
   }

@@ -24,6 +24,7 @@ export function ContactList({ onMessage }: ContactListProps) {
     rejectFriendRequest,
     deleteFriend,
     isLoading,
+    isSendingRequest,
     error,
     notice,
     loadFriends,
@@ -53,7 +54,6 @@ export function ContactList({ onMessage }: ContactListProps) {
 
   async function handleAddFriend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!friendIdentifier.trim()) return;
     try {
       await sendFriendRequest(friendIdentifier.trim(), requestMessage);
       setFriendIdentifier("");
@@ -86,13 +86,18 @@ export function ContactList({ onMessage }: ContactListProps) {
             className="h-10"
             maxLength={255}
           />
-          <Button type="submit" variant="primary" disabled={isLoading}>
+          <Button type="submit" variant="primary" disabled={isSendingRequest} className="min-w-[152px]">
             <SendHorizontal className="h-4 w-4" />
-            Send Request
+            {isSendingRequest ? "Sending..." : "Send Request"}
           </Button>
         </form>
       </div>
 
+      {isSendingRequest ? (
+        <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100" aria-live="polite">
+          Sending friend request...
+        </div>
+      ) : null}
       {error ? <div className="rounded-lg border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm text-red-100">{error}</div> : null}
       {notice ? <div className="rounded-lg border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">{notice}</div> : null}
 
