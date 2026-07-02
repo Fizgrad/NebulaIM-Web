@@ -75,6 +75,25 @@ type SendBridgeMessageResponse = {
   response: CommonBridgeResponse;
 };
 
+export type BridgeMessageInfo = {
+  messageId: string;
+  conversationId: string;
+  fromUserId: string;
+  toUserId: string;
+  groupId: string;
+  contentType: number;
+  content: string;
+  status: number;
+  recalled: boolean;
+  recalledAt: string | number;
+  createdAt: string | number;
+};
+
+type ListBridgeMessagesResponse = {
+  ok: boolean;
+  messages: BridgeMessageInfo[];
+};
+
 type RawFriendRequest = {
   friendRequestId: string;
   fromUserId: string;
@@ -379,6 +398,25 @@ export async function markBridgeConversationRead(baseUrl: string, userId: string
       { retries: 1 }
     )
   );
+}
+
+export async function listBridgeConversationMessages(
+  baseUrl: string,
+  userId: string,
+  conversationId: string,
+  before = Date.now(),
+  limit = 50
+) {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.get<ListBridgeMessagesResponse>(`${baseUrl.replace(/\/$/, "")}/api/messages/conversations/${conversationId}`, {
+          params: { userId, before, limit }
+        }),
+      { retries: 1 }
+    )
+  );
+  return response.messages ?? [];
 }
 
 export async function sendBridgeSingleMessage(

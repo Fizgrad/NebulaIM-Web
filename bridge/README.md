@@ -53,9 +53,18 @@ HEARTBEAT_INTERVAL_MS=15000
 GATEWAY_REQUEST_TIMEOUT_MS=5000
 PROTO_DIR=../proto
 WEB_STATIC_DIR=
+
+MYSQL_HOST=
+MYSQL_PORT=3306
+MYSQL_USER=
+MYSQL_PASSWORD=
+MYSQL_DATABASE=
+MYSQL_CONNECTION_LIMIT=5
 ```
 
 `WEB_STATIC_DIR` can point to the built frontend directory, for example `/opt/nebulaim-web/web`, so the Bridge process can serve the SPA. When the Bridge serves the SPA, frontend routes fall back to `index.html` and `/api/*` routes remain API-only.
+
+`MYSQL_*` enables read-only message history loading for opened conversations. The Bridge verifies that `userId` owns the requested conversation before reading from the `messages` table.
 
 ## Install
 
@@ -167,6 +176,7 @@ The Bridge forwards these calls to `nebula.proto.RelationService` on `RELATION_S
 ## Message HTTP API
 
 ```text
+GET  /api/messages/conversations/:conversationId?userId=<id>&limit=50
 POST /api/messages/single
 POST /api/messages/group
 ```
@@ -194,6 +204,8 @@ Group message request:
 ```
 
 The Bridge forwards these calls to `nebula.proto.MessageService` on `MESSAGE_SERVICE_HOST:MESSAGE_SERVICE_PORT`. The frontend uses these endpoints for sending messages so a refreshed browser session can send even when the Gateway WebSocket has not re-run `LOGIN_REQ`.
+
+Conversation history is read from MySQL using `MYSQL_*` because the current MessageService protobuf does not expose a list-history RPC.
 
 ## Conversation HTTP API
 

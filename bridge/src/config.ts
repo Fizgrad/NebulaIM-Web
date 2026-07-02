@@ -24,7 +24,13 @@ const configSchema = z.object({
   HEARTBEAT_INTERVAL_MS: z.coerce.number().int().min(1000).default(15000),
   GATEWAY_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).default(5000),
   PROTO_DIR: z.string().default("../proto"),
-  WEB_STATIC_DIR: z.string().default("")
+  WEB_STATIC_DIR: z.string().default(""),
+  MYSQL_HOST: z.string().default(""),
+  MYSQL_PORT: z.coerce.number().int().min(1).max(65535).default(3306),
+  MYSQL_USER: z.string().default(""),
+  MYSQL_PASSWORD: z.string().default(""),
+  MYSQL_DATABASE: z.string().default(""),
+  MYSQL_CONNECTION_LIMIT: z.coerce.number().int().min(1).max(50).default(5)
 });
 
 const parsed = configSchema.safeParse(process.env);
@@ -57,7 +63,13 @@ export const config = {
   heartbeatIntervalMs: raw.HEARTBEAT_INTERVAL_MS,
   gatewayRequestTimeoutMs: raw.GATEWAY_REQUEST_TIMEOUT_MS,
   protoDir: path.resolve(process.cwd(), raw.PROTO_DIR),
-  webStaticDir: raw.WEB_STATIC_DIR ? path.resolve(process.cwd(), raw.WEB_STATIC_DIR) : ""
+  webStaticDir: raw.WEB_STATIC_DIR ? path.resolve(process.cwd(), raw.WEB_STATIC_DIR) : "",
+  mysqlHost: raw.MYSQL_HOST,
+  mysqlPort: raw.MYSQL_PORT,
+  mysqlUser: raw.MYSQL_USER,
+  mysqlPassword: raw.MYSQL_PASSWORD,
+  mysqlDatabase: raw.MYSQL_DATABASE,
+  mysqlConnectionLimit: raw.MYSQL_CONNECTION_LIMIT
 };
 
 export type BridgeConfig = typeof config;

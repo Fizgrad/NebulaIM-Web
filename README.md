@@ -77,9 +77,9 @@ Persisted browser settings are migrated away from the old `localhost:9000` and `
 - Browser-side PacketHeader encoder/decoder in `src/services/browserPacketCodec.ts`.
 - Browser-side Protobuf loading in `src/services/browserProtoRegistry.ts`.
 - Gateway client implementation in `src/services/directGatewayClient.ts`.
-- Bridge HTTP API layer for UserService, RelationService, ConversationService and AdminService.
+- Bridge HTTP API layer for UserService, RelationService, MessageService, ConversationService and AdminService.
 - Relation workflow based on friend requests: send, list incoming/outgoing, accept and reject.
-- Conversation and message state backed by Gateway pushes and ConversationService HTTP APIs.
+- Conversation and message state backed by Gateway pushes, MessageService send APIs and Bridge message history loading.
 - Zustand stores split by domain.
 - Local persistence for auth token and settings.
 - Token expiry tracking and refresh through UserService.
