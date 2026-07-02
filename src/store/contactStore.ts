@@ -24,6 +24,7 @@ type ContactState = {
   incomingRequests: FriendRequestView[];
   outgoingRequests: FriendRequestView[];
   isLoading: boolean;
+  isSendingRequest: boolean;
   error: string | null;
   notice: string | null;
   loadFriends: () => Promise<void>;
@@ -85,6 +86,7 @@ export const useContactStore = create<ContactState>((set) => ({
   incomingRequests: [],
   outgoingRequests: [],
   isLoading: false,
+  isSendingRequest: false,
   error: null,
   notice: null,
   loadFriends: async () => {
@@ -109,7 +111,7 @@ export const useContactStore = create<ContactState>((set) => ({
   sendFriendRequest: async (identifier, message = "") => {
     const settings = useSettingsStore.getState();
     const currentUserId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
-    set({ isLoading: true, error: null });
+    set({ isSendingRequest: true, error: null, notice: null });
     try {
       const toUserId = await resolveFriendUserId(settings.bridgeHttpUrl, identifier);
       if (toUserId === currentUserId) {
@@ -127,12 +129,12 @@ export const useContactStore = create<ContactState>((set) => ({
       set({
         incomingRequests,
         outgoingRequests,
-        isLoading: false,
+        isSendingRequest: false,
         error: null,
         notice: "Friend request sent."
       });
     } catch (error) {
-      set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to send friend request." });
+      set({ isSendingRequest: false, error: error instanceof Error ? error.message : "Failed to send friend request." });
       throw error;
     }
   },
