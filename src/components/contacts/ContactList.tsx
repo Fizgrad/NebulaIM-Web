@@ -65,43 +65,55 @@ export function ContactList({ onMessage }: ContactListProps) {
 
   return (
     <div className="space-y-5">
-      <div className="max-w-xl">
-        <Input
-          label="Search Friends"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="name or username"
-          icon={<Search className="h-4 w-4" />}
-        />
-      </div>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
+        <section className="space-y-3">
+          <Input
+            label="Search Friends"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="name or username"
+            icon={<Search className="h-4 w-4" />}
+          />
+          <div className="grid gap-3 xl:grid-cols-2">
+            {filtered.map((user) => (
+              <ContactCard key={user.id} user={user} onMessage={onMessage} onDelete={deleteFriend} />
+            ))}
+          </div>
+          {!isLoading && filtered.length === 0 ? (
+            <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-6 text-sm text-nebula-muted">
+              No friends loaded.
+            </div>
+          ) : null}
+        </section>
 
-      <Card className="p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
-            <UserPlus className="h-4 w-4" />
-          </span>
-          <h3 className="text-sm font-semibold text-nebula-text">Add Friend</h3>
-        </div>
-        <form className="grid gap-3 md:grid-cols-[minmax(180px,240px)_minmax(220px,1fr)_auto] md:items-end" onSubmit={handleAddFriend}>
-          <Input
-            label="Username or User ID"
-            value={friendIdentifier}
-            onChange={(event) => setFriendIdentifier(event.target.value)}
-            placeholder="username or user id"
-          />
-          <Input
-            label="Request Message"
-            value={requestMessage}
-            onChange={(event) => setRequestMessage(event.target.value)}
-            placeholder="request message"
-            maxLength={255}
-          />
-          <Button type="submit" variant="primary" disabled={isSendingRequest} className="h-11 min-w-[152px]">
-            <SendHorizontal className="h-4 w-4" />
-            {isSendingRequest ? "Sending..." : "Send Request"}
-          </Button>
-        </form>
-      </Card>
+        <Card className="p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+              <UserPlus className="h-4 w-4" />
+            </span>
+            <h3 className="text-sm font-semibold text-nebula-text">Add Friend</h3>
+          </div>
+          <form className="space-y-3" onSubmit={handleAddFriend}>
+            <Input
+              label="Username or User ID"
+              value={friendIdentifier}
+              onChange={(event) => setFriendIdentifier(event.target.value)}
+              placeholder="username or user id"
+            />
+            <Input
+              label="Request Message"
+              value={requestMessage}
+              onChange={(event) => setRequestMessage(event.target.value)}
+              placeholder="request message"
+              maxLength={255}
+            />
+            <Button type="submit" variant="primary" disabled={isSendingRequest} className="h-11 w-full">
+              <SendHorizontal className="h-4 w-4" />
+              {isSendingRequest ? "Sending..." : "Send Request"}
+            </Button>
+          </form>
+        </Card>
+      </div>
 
       {isSendingRequest ? (
         <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100" aria-live="polite">
@@ -130,16 +142,6 @@ export function ContactList({ onMessage }: ContactListProps) {
         />
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-2">
-        {filtered.map((user) => (
-          <ContactCard key={user.id} user={user} onMessage={onMessage} onDelete={deleteFriend} />
-        ))}
-      </div>
-      {!isLoading && filtered.length === 0 ? (
-        <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-6 text-sm text-nebula-muted">
-          No friends loaded.
-        </div>
-      ) : null}
     </div>
   );
 }

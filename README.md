@@ -350,7 +350,7 @@ http://localhost:5173
 - From user A, send user B a friend request by username or numeric backend `user_id`.
 - From user B, accept the incoming friend request.
 - Confirm both users list each other as friends.
-- Open a direct chat by numeric backend `user_id`.
+- Open Chat and select the friend from the centered friend list.
 - Send a message.
 - Confirm sender status reaches `delivered`.
 - Confirm recipient receives `PUSH_MSG`.
@@ -417,8 +417,8 @@ curl -s http://127.0.0.1:8080/info
 - Bridge `/ws` returns `502`: verify Gateway is listening at `GATEWAY_TCP_HOST:GATEWAY_TCP_PORT`.
 - Gateway closes the socket: verify the frontend is sending binary WebSocket frames, not JSON/text frames.
 - Friend request accept fails: the accepting request body must contain the receiver's numeric `userId`.
-- Message send fails: use numeric backend `user_id` / `group_id`.
-- Message does not reach MessageService: confirm the send uses the same WebSocket connection that logged in.
+- Message send fails: verify `/info` includes the MessageService target and `/api/messages/single` can reach it.
+- Message does not reach MessageService: confirm `MESSAGE_SERVICE_HOST:MESSAGE_SERVICE_PORT` points to the running backend service.
 - Conversation list is empty: send a message first or verify `ConversationService :50056`.
 - Admin health works but cleanup fails: the token likely lacks `cleanup` scope.
 - Admin Kafka lag returns permission denied: use a token with `kafka` scope.
