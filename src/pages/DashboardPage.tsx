@@ -12,6 +12,7 @@ import { Spinner } from "../components/common/Spinner";
 import { Card } from "../components/common/Card";
 import { Badge } from "../components/common/Badge";
 import { Input } from "../components/common/Input";
+import { PageContainer } from "../components/layout/PageContainer";
 import { MetricCard } from "../components/dashboard/MetricCard";
 import { ServiceHealthCard } from "../components/dashboard/ServiceHealthCard";
 import { EventTimeline } from "../components/dashboard/EventTimeline";
@@ -21,7 +22,11 @@ import { useChatStore } from "../store/chatStore";
 import { useAdminStore } from "../store/adminStore";
 import { formatShortTime } from "../utils/time";
 
-export function DashboardPage() {
+type DashboardPageProps = {
+  embedded?: boolean;
+};
+
+export function DashboardPage({ embedded = false }: DashboardPageProps) {
   const [runtime, setRuntime] = useState<DashboardRuntime | null>(null);
   const [runtimeError, setRuntimeError] = useState("");
   const [isRuntimeLoading, setIsRuntimeLoading] = useState(false);
@@ -106,28 +111,8 @@ export function DashboardPage() {
       : runtime.overview.kafkaLag.response.message || "No lag entries returned";
   }, [runtime]);
 
-  return (
-    <div className="min-h-screen bg-nebula-bg text-nebula-text">
-      <NebulaBackground />
-      <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
-        <Logo />
-        <div className="flex gap-2">
-          <Link to="/">
-            <Button variant="ghost">Home</Button>
-          </Link>
-          <Link to="/app/chat">
-            <Button variant="primary">Open Client</Button>
-          </Link>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-5 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-semibold text-white">NebulaIM Dashboard</h1>
-          <p className="mt-2 text-sm text-nebula-muted">Bridge health, Gateway connectivity and runtime metrics for NebulaIM.</p>
-        </div>
-
-        <div className="space-y-5">
+  const dashboardContent = (
+    <div className="space-y-5">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <Card className="p-4">
               <div className="flex items-center justify-between gap-4">
@@ -270,6 +255,37 @@ export function DashboardPage() {
             </>
           ) : null}
         </div>
+  );
+
+  if (embedded) {
+    return (
+      <PageContainer title="Dashboard" subtitle="Bridge health, Gateway connectivity and runtime metrics for NebulaIM.">
+        {dashboardContent}
+      </PageContainer>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-nebula-bg text-nebula-text">
+      <NebulaBackground />
+      <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
+        <Logo />
+        <div className="flex gap-2">
+          <Link to="/">
+            <Button variant="ghost">Home</Button>
+          </Link>
+          <Link to="/app/chat">
+            <Button variant="primary">Open Client</Button>
+          </Link>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-5 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-semibold text-white">NebulaIM Dashboard</h1>
+          <p className="mt-2 text-sm text-nebula-muted">Bridge health, Gateway connectivity and runtime metrics for NebulaIM.</p>
+        </div>
+        {dashboardContent}
       </main>
     </div>
   );
