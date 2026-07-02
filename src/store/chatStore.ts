@@ -38,7 +38,7 @@ type ChatState = {
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   retryMessage: (conversationId: string, messageId: string) => Promise<void>;
   receiveMessage: (message: Message) => void;
-  markConversationRead: (conversationId: string) => void;
+  markConversationRead: (conversationId: string) => Promise<void>;
   updateMessageStatus: (conversationId: string, messageId: string, status: MessageStatus) => void;
   openConversationForUser: (user: User) => string;
   openConversationForGroup: (group: Group) => string;
@@ -269,9 +269,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setActiveConversationId: (activeConversationId) => {
     set({ activeConversationId });
     if (activeConversationId) {
-      get().markConversationRead(activeConversationId);
-      void get().loadMessages(activeConversationId).catch((error) => {
-        clientLogger.warn("Load messages failed", error);
+      void (async () => {
+        await get().markConversationRead(activeConversationId);
+        await get().loadMessages(activeConversationId);
+        await get().loadConversations();
+      })().catch((error) => {
+        clientLogger.warn("Open conversation failed", error);
       });
     }
   },
@@ -296,9 +299,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const friendById = new Map(useContactStore.getState().contacts.map((friend) => [friend.id, friend]));
     set((state) => {
       const mapped = mergeBackendConversations(state.conversations, conversations.map((item) => mapBackendConversation(item, friendById)));
+      const normalized = mapped.map((conversation) =>
+        conversation.id === state.activeConversationId ? { ...conversation, unreadCount: 0 } : conversation
+      );
       const activeStillExists = mapped.some((conversation) => conversation.id === state.activeConversationId);
       return {
-        conversations: mapped,
+        conversations: normalized,
         activeConversationId: activeStillExists ? state.activeConversationId : null
       };
     });
@@ -541,20 +547,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         clientLogger.warn("Reload conversations after incoming message failed", error);
       });
   },
-  markConversationRead: (conversationId) => {
+  markConversationRead: async (conversationId) => {
     const conversation = get().conversations.find((item) => item.id === conversationId);
     const settings = useSettingsStore.getState();
     const userId = useAuthStore.getState().user?.id;
-    if (conversation?.backendConversationId && isNumericId(userId)) {
-      void markBridgeConversationRead(settings.bridgeHttpUrl, userId, conversation.backendConversationId).catch((error) => {
-        clientLogger.warn("Mark conversation read failed", error);
-      });
-    }
     set((state) => ({
       conversations: state.conversations.map((conversation) =>
         conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation
       )
     }));
+    if (conversation?.backendConversationId && isNumericId(userId)) {
+      await markBridgeConversationRead(settings.bridgeHttpUrl, userId, conversation.backendConversationId);
+    }
   },
   updateMessageStatus: (conversationId, messageId, status) => {
     set((state) => ({
