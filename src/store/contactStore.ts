@@ -4,6 +4,7 @@ import type { User } from "../types/user";
 import {
   acceptBridgeFriendRequest,
   deleteBridgeFriend,
+  getBridgeUserByUsername,
   getBridgeUserInfo,
   listBridgeFriendRequests,
   listBridgeFriends,
@@ -26,7 +27,7 @@ type ContactState = {
   error: string | null;
   notice: string | null;
   loadFriends: () => Promise<void>;
-  sendFriendRequest: (userId: string, message?: string) => Promise<void>;
+  sendFriendRequest: (identifier: string, message?: string) => Promise<void>;
   acceptFriendRequest: (requestId: string) => Promise<void>;
   rejectFriendRequest: (requestId: string) => Promise<void>;
   deleteFriend: (userId: string) => Promise<void>;
@@ -38,6 +39,18 @@ function requireNumericId(value: string | undefined, label: string) {
     throw new Error(`${label} must be numeric.`);
   }
   return value;
+}
+
+async function resolveFriendUserId(baseUrl: string, identifier: string) {
+  const value = identifier.trim();
+  if (!value) {
+    throw new Error("Friend username or user_id is required.");
+  }
+  if (/^\d+$/.test(value)) {
+    return value;
+  }
+  const user = await getBridgeUserByUsername(baseUrl, value);
+  return requireNumericId(user.id, "Resolved friend user_id");
 }
 
 function fallbackUser(userId: string): User {
@@ -93,12 +106,15 @@ export const useContactStore = create<ContactState>((set) => ({
       set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to load friends." });
     }
   },
-  sendFriendRequest: async (userId, message = "") => {
+  sendFriendRequest: async (identifier, message = "") => {
     const settings = useSettingsStore.getState();
-    const toUserId = requireNumericId(userId.trim(), "Friend user_id");
     const currentUserId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
     set({ isLoading: true, error: null });
     try {
+      const toUserId = await resolveFriendUserId(settings.bridgeHttpUrl, identifier);
+      if (toUserId === currentUserId) {
+        throw new Error("You cannot send a friend request to yourself.");
+      }
       await sendBridgeFriendRequest(settings.bridgeHttpUrl, currentUserId, toUserId, message.trim());
       const [incoming, outgoing] = await Promise.all([
         listBridgeFriendRequests(settings.bridgeHttpUrl, currentUserId, true, 0),

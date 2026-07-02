@@ -111,6 +111,7 @@ The Bridge exposes UserService endpoints needed by the browser outside the Gatew
 
 ```text
 GET  /api/auth/users/:userId
+GET  /api/auth/users/by-username/:username
 POST /api/auth/refresh
 ```
 
@@ -138,7 +139,7 @@ POST /api/relation/groups/:groupId/leave
 GET  /api/relation/groups/:groupId/members
 ```
 
-The current frontend creates friendships through the RelationService friend request flow:
+The current frontend creates friendships through the RelationService friend request flow. The Contacts page accepts either a numeric `user_id` or a username; usernames are resolved through UserService before sending the request:
 
 ```json
 {

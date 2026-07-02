@@ -55,6 +55,11 @@ type UserGrpcClient = grpc.Client & {
     options: grpc.CallOptions,
     callback: (error: grpc.ServiceError | null, response: GetUserInfoResponse) => void
   ) => void;
+  GetUserByUsername: (
+    request: Record<string, unknown>,
+    options: grpc.CallOptions,
+    callback: (error: grpc.ServiceError | null, response: GetUserInfoResponse) => void
+  ) => void;
 };
 
 type UserServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => UserGrpcClient;
@@ -71,11 +76,59 @@ const refreshSchema = z.object({
 });
 
 const userIdSchema = z.string().regex(/^\d+$/, "User ID must be numeric.");
+const usernameParamSchema = z.string().trim().min(1, "Username is required.").max(64, "Username is too long.");
 
 let cachedClient: UserGrpcClient | null = null;
 
 export function createAuthRouter(): Router {
   const router = express.Router();
+
+  router.get("/users/by-username/:username", async (req, res) => {
+    const parsed = usernameParamSchema.safeParse(req.params.username);
+    if (!parsed.success) {
+      res.status(400).json({
+        ok: false,
+        error: {
+          code: "INVALID_USERNAME",
+          message: parsed.error.issues[0]?.message ?? "Invalid username."
+        }
+      });
+      return;
+    }
+
+    const requestId = req.header("x-request-id") ?? createId("user_by_username_req");
+    try {
+      const response = await invokeGetUserByUsername({
+        requestId,
+        username: parsed.data
+      });
+
+      if (response.response.code !== 0 || !response.user) {
+        res.status(statusForUserCode(response.response.code)).json({
+          ok: false,
+          error: {
+            code: userCodeToString(response.response.code),
+            message: response.response.message || "User not found."
+          }
+        });
+        return;
+      }
+
+      res.json({
+        ok: true,
+        user: response.user
+      });
+    } catch (error) {
+      logger.warn("UserService.GetUserByUsername failed", { detail: error });
+      res.status(502).json({
+        ok: false,
+        error: {
+          code: "USER_SERVICE_UNAVAILABLE",
+          message: error instanceof Error ? error.message : "UserService.GetUserByUsername failed."
+        }
+      });
+    }
+  });
 
   router.get("/users/:userId", async (req, res) => {
     const parsed = userIdSchema.safeParse(req.params.userId);
@@ -251,6 +304,15 @@ function invokeRefreshToken(request: Record<string, unknown>) {
 function invokeGetUserInfo(request: Record<string, unknown>) {
   return new Promise<GetUserInfoResponse>((resolve, reject) => {
     getUserClient().GetUserInfo(request, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
+      if (error) reject(error);
+      else resolve(response);
+    });
+  });
+}
+
+function invokeGetUserByUsername(request: Record<string, unknown>) {
+  return new Promise<GetUserInfoResponse>((resolve, reject) => {
+    getUserClient().GetUserByUsername(request, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
       if (error) reject(error);
       else resolve(response);
     });

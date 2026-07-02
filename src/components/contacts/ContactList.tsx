@@ -30,7 +30,7 @@ export function ContactList({ onMessage }: ContactListProps) {
     clearNotice
   } = useContactStore();
   const [query, setQuery] = useState("");
-  const [newFriend, setNewFriend] = useState("");
+  const [friendIdentifier, setFriendIdentifier] = useState("");
   const [requestMessage, setRequestMessage] = useState("");
 
   useEffect(() => {
@@ -53,10 +53,10 @@ export function ContactList({ onMessage }: ContactListProps) {
 
   async function handleAddFriend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!newFriend.trim()) return;
+    if (!friendIdentifier.trim()) return;
     try {
-      await sendFriendRequest(newFriend.trim(), requestMessage);
-      setNewFriend("");
+      await sendFriendRequest(friendIdentifier.trim(), requestMessage);
+      setFriendIdentifier("");
       setRequestMessage("");
     } catch {
       // Store owns the displayed error state.
@@ -74,9 +74,9 @@ export function ContactList({ onMessage }: ContactListProps) {
         />
         <form className="grid gap-2 md:grid-cols-[minmax(120px,160px)_1fr_auto]" onSubmit={handleAddFriend}>
           <Input
-            value={newFriend}
-            onChange={(event) => setNewFriend(event.target.value)}
-            placeholder="numeric user id"
+            value={friendIdentifier}
+            onChange={(event) => setFriendIdentifier(event.target.value)}
+            placeholder="username or user id"
             className="h-10"
           />
           <Input
