@@ -23,6 +23,7 @@ export const router = createBrowserRouter([
       { path: "chat", element: <ChatPage /> },
       { path: "contacts", element: <ContactsPage /> },
       { path: "groups", element: <GroupsPage /> },
+      { path: "dashboard", element: <DashboardPage embedded /> },
       { path: "profile", element: <ProfilePage /> },
       { path: "settings", element: <SettingsPage /> }
     ]

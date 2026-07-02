@@ -41,3 +41,36 @@ test("settings page shows Bridge HTTP and Gateway WebSocket defaults", async ({ 
   await expect(page.getByLabel("Direct Gateway WebSocket URL")).toHaveValue("ws://173.231.53.23:8080/ws");
   await expect(page.getByLabel("Bridge HTTP URL")).toHaveValue("http://173.231.53.23:8080");
 });
+
+test("dashboard stays inside app navigation", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "nebulaim-auth",
+      JSON.stringify({
+        state: {
+          user: {
+            id: "10001",
+            username: "e2e",
+            nickname: "E2E",
+            avatarColor: "from-violet-500 to-cyan-400",
+            status: "online",
+            registeredAt: 0,
+            gateway: "ws://173.231.53.23:8080/ws",
+            connectionId: "gateway-10001"
+          },
+          token: "e2e-token",
+          tokenExpireAt: Date.now() + 3600_000,
+          lastRefreshAt: Date.now(),
+          isAuthenticated: true
+        },
+        version: 0
+      })
+    );
+  });
+
+  await page.goto("/app/chat");
+  await page.getByRole("link", { name: "Dashboard" }).click();
+
+  await expect(page).toHaveURL(/\/app\/dashboard$/);
+  await expect(page.getByRole("link", { name: "Contacts" })).toBeVisible();
+});

@@ -10,7 +10,7 @@ const navItems = [
   { label: "Chat", path: "/app/chat", icon: MessageSquare },
   { label: "Contacts", path: "/app/contacts", icon: UserRound },
   { label: "Groups", path: "/app/groups", icon: UsersRound },
-  { label: "Dashboard", path: "/dashboard", icon: BarChart3 },
+  { label: "Dashboard", path: "/app/dashboard", icon: BarChart3 },
   { label: "Admin", path: "/admin", icon: ShieldCheck },
   { label: "Profile", path: "/app/profile", icon: Network },
   { label: "Settings", path: "/app/settings", icon: Settings }
