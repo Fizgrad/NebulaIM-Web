@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Check, Clock3, Inbox, Search, SendHorizontal, X } from "lucide-react";
+import { Check, Clock3, Inbox, Search, SendHorizontal, UserPlus, X } from "lucide-react";
 import type { User } from "../../types/user";
 import type { FriendRequestView } from "../../store/contactStore";
 import { ContactCard } from "./ContactCard";
@@ -65,33 +65,43 @@ export function ContactList({ onMessage }: ContactListProps) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 xl:grid-cols-[1fr_520px]">
+      <div className="max-w-xl">
         <Input
+          label="Search Friends"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search friends"
+          placeholder="name or username"
           icon={<Search className="h-4 w-4" />}
         />
-        <form className="grid gap-2 md:grid-cols-[minmax(120px,160px)_1fr_auto]" onSubmit={handleAddFriend}>
+      </div>
+
+      <Card className="p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="grid h-8 w-8 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+            <UserPlus className="h-4 w-4" />
+          </span>
+          <h3 className="text-sm font-semibold text-nebula-text">Add Friend</h3>
+        </div>
+        <form className="grid gap-3 md:grid-cols-[minmax(180px,240px)_minmax(220px,1fr)_auto] md:items-end" onSubmit={handleAddFriend}>
           <Input
+            label="Username or User ID"
             value={friendIdentifier}
             onChange={(event) => setFriendIdentifier(event.target.value)}
             placeholder="username or user id"
-            className="h-10"
           />
           <Input
+            label="Request Message"
             value={requestMessage}
             onChange={(event) => setRequestMessage(event.target.value)}
             placeholder="request message"
-            className="h-10"
             maxLength={255}
           />
-          <Button type="submit" variant="primary" disabled={isSendingRequest} className="min-w-[152px]">
+          <Button type="submit" variant="primary" disabled={isSendingRequest} className="h-11 min-w-[152px]">
             <SendHorizontal className="h-4 w-4" />
             {isSendingRequest ? "Sending..." : "Send Request"}
           </Button>
         </form>
-      </div>
+      </Card>
 
       {isSendingRequest ? (
         <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100" aria-live="polite">
