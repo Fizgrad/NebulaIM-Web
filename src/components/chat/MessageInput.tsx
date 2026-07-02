@@ -25,7 +25,7 @@ export function MessageInput({ disabled, onSend }: MessageInputProps) {
   }
 
   return (
-    <div className="border-t border-nebula-border bg-nebula-panel/80 p-3 sm:p-4">
+    <div className="shrink-0 border-t border-nebula-border bg-nebula-panel/80 p-3 sm:p-4">
       <div className="flex items-end gap-3 rounded-lg border border-nebula-border bg-white/[0.05] p-2">
         <textarea
           value={value}

@@ -32,7 +32,11 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
   const messages = conversation ? messagesByConversationId[conversation.id] ?? [] : [];
 
   useEffect(() => {
-    if (activeConversationId) markConversationRead(activeConversationId);
+    if (activeConversationId) {
+      void markConversationRead(activeConversationId).catch(() => {
+        // The store already clears local unread state; later refreshes can retry the backend read marker.
+      });
+    }
   }, [activeConversationId, markConversationRead, messages.length]);
 
   useEffect(() => {
@@ -41,14 +45,14 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
 
   if (!conversation) {
     return (
-      <section className={cn("h-full min-h-0 flex-1 bg-nebula-bg", className)}>
+      <section className={cn("h-full min-h-0 flex-1 overflow-hidden bg-nebula-bg", className)}>
         <EmptyChatState />
       </section>
     );
   }
 
   return (
-    <section className={cn("h-full min-h-0 min-w-0 flex-1 flex-col bg-nebula-bg", className)}>
+    <section className={cn("h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-nebula-bg", className)}>
       <header className="flex flex-col gap-3 border-b border-nebula-border bg-nebula-panel/[0.54] px-3 py-3 backdrop-blur-xl sm:px-5 sm:py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           {onBack ? (

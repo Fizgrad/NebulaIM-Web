@@ -167,10 +167,35 @@ async function handleMarkConversationRead(req: express.Request, res: express.Res
       return;
     }
 
+    await persistConversationRead(parsedBody.data.userId, parsedConversation.data);
     res.json({ ok: true, response });
   } catch (error) {
     sendRpcError(res, "MessageService.MarkConversationRead failed.", error);
   }
+}
+
+async function persistConversationRead(userId: string, conversationId: string) {
+  if (!hasMysqlConfig()) return;
+
+  const readAt = Date.now();
+  const pool = getMysqlPool();
+  await pool.execute(
+    `INSERT INTO message_receipts(message_id,user_id,delivered_at,read_at,created_at,updated_at)
+     SELECT m.message_id, ?, ?, ?, ?, ?
+     FROM messages m
+     WHERE m.conversation_id = ?
+       AND m.from_user_id <> ?
+       AND m.recalled = 0
+     ON DUPLICATE KEY UPDATE
+       delivered_at=GREATEST(delivered_at,VALUES(delivered_at)),
+       read_at=GREATEST(read_at,VALUES(read_at)),
+       updated_at=VALUES(updated_at)`,
+    [userId, readAt, readAt, readAt, readAt, conversationId, userId]
+  );
+  await pool.execute(
+    "UPDATE conversations SET unread_count = 0, updated_at = GREATEST(updated_at, ?) WHERE conversation_id = ? AND owner_user_id = ?",
+    [readAt, conversationId, userId]
+  );
 }
 
 async function handleConversationAction(
