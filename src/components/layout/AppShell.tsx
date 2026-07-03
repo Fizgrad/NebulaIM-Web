@@ -19,8 +19,8 @@ export function AppShell() {
       <Sidebar />
       <main
         className={cn(
-          "min-w-0 flex-1 overflow-x-hidden md:h-screen md:overflow-hidden",
-          isChatRoute ? "chat-shell-main" : "app-shell-main"
+          "min-w-0 flex-1 overflow-x-hidden",
+          isChatRoute ? "chat-shell-main md:h-screen md:overflow-hidden" : "app-shell-main md:h-screen md:overflow-y-auto"
         )}
       >
         <Outlet />

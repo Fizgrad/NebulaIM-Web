@@ -106,12 +106,13 @@ export function createMessageRouter(): Router {
 
       const before = parsed.data.before ?? Date.now();
       const limit = parsed.data.limit;
-      const [rows] = await pool.query<MessageRow[]>(
+      const [rows] = await pool.execute<MessageRow[]>(
         `SELECT message_id, conversation_id, from_user_id, to_user_id, group_id, message_type, content, status, recalled, recalled_at, created_at
          FROM messages
-         WHERE conversation_id = ${conversationId} AND created_at <= ${before}
+         WHERE conversation_id = ? AND created_at <= ?
          ORDER BY created_at DESC, message_id DESC
-         LIMIT ${limit}`
+         LIMIT ${limit}`,
+        [conversationId, before]
       );
 
       res.json({

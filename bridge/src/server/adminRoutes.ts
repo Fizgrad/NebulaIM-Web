@@ -15,6 +15,8 @@ type AdminGrpcClient = grpc.Client & {
   GetOutboxStats: AdminUnaryMethod;
   GetKafkaLagInfo: AdminUnaryMethod;
   RunCleanup: AdminUnaryMethod;
+  GetServiceOverview: AdminUnaryMethod;
+  ListAuditEvents: AdminUnaryMethod;
 };
 
 type AdminUnaryMethod = (
@@ -23,7 +25,14 @@ type AdminUnaryMethod = (
   options: grpc.CallOptions,
   callback: GrpcCallback<unknown>
 ) => void;
-type AdminMethod = "HealthCheck" | "GetSystemStats" | "GetOutboxStats" | "GetKafkaLagInfo" | "RunCleanup";
+type AdminMethod =
+  | "HealthCheck"
+  | "GetSystemStats"
+  | "GetOutboxStats"
+  | "GetKafkaLagInfo"
+  | "RunCleanup"
+  | "GetServiceOverview"
+  | "ListAuditEvents";
 type ServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => AdminGrpcClient;
 
 let cachedClient: AdminGrpcClient | null = null;
@@ -45,6 +54,16 @@ export function createAdminRouter(): Router {
 
   router.get("/kafka-lag", async (req, res) => {
     await callAdmin(req, res, "GetKafkaLagInfo", {});
+  });
+
+  router.get("/service-overview", async (req, res) => {
+    await callAdmin(req, res, "GetServiceOverview", {});
+  });
+
+  router.get("/audit-events", async (req, res) => {
+    const limitValue = Number(req.query.limit ?? 20);
+    const limit = Number.isFinite(limitValue) ? Math.min(Math.max(Math.floor(limitValue), 1), 100) : 20;
+    await callAdmin(req, res, "ListAuditEvents", { limit });
   });
 
   router.post("/cleanup", async (req, res) => {

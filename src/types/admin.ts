@@ -41,6 +41,33 @@ export type AdminKafkaLagInfo = {
   lags: AdminKafkaLag[];
 };
 
+export type AdminServiceOverviewItem = {
+  name: string;
+  address: string;
+  state: string;
+  detail: string;
+};
+
+export type AdminServiceOverview = {
+  response: AdminCommonResponse;
+  services: AdminServiceOverviewItem[];
+};
+
+export type AdminAuditEvent = {
+  timestampMs: string | number;
+  requestId: string;
+  principal: string;
+  action: string;
+  scope: string;
+  decision: string;
+  detail: string;
+};
+
+export type AdminAuditEvents = {
+  response: AdminCommonResponse;
+  events: AdminAuditEvent[];
+};
+
 export type AdminCleanupResult = {
   response: AdminCommonResponse;
   cleanedRows: string;
@@ -51,6 +78,8 @@ export type AdminOverview = {
   systemStats: AdminSystemStats;
   outboxStats: AdminOutboxStats;
   kafkaLag: AdminKafkaLagInfo;
+  serviceOverview: AdminServiceOverview;
+  auditEvents: AdminAuditEvents;
 };
 
 export type AdminApiEnvelope<T> = {

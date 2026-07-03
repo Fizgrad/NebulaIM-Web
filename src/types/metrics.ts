@@ -24,6 +24,7 @@ export type MetricsPoint = {
 };
 
 export type DashboardEventType =
+  | "admin audit"
   | "admin health"
   | "system stats"
   | "outbox status"

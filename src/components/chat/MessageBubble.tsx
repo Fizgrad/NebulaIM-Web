@@ -7,6 +7,7 @@ import { cn } from "../../utils/cn";
 
 type MessageBubbleProps = {
   message: Message;
+  showSenderName?: boolean;
   onRetry?: (messageId: string) => void;
 };
 
@@ -18,13 +19,16 @@ const statusIcon: Record<MessageStatus, JSX.Element> = {
   failed: <AlertCircle className="h-3 w-3 text-red-200" />
 };
 
-export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
+export function MessageBubble({ message, showSenderName = false, onRetry }: MessageBubbleProps) {
   const senderName = message.senderName ?? `User ${message.fromUserId}`;
 
   return (
     <div className={cn("flex gap-3", message.isMine ? "justify-end" : "justify-start")}>
       {!message.isMine ? <Avatar name={senderName} src={message.senderAvatar} size="sm" /> : null}
       <div className={cn("flex max-w-[84%] flex-col sm:max-w-[78%] md:max-w-[62%]", message.isMine ? "items-end" : "items-start")}>
+        {showSenderName ? (
+          <div className="mb-1 max-w-full truncate px-1 text-xs font-medium text-nebula-muted">{senderName}</div>
+        ) : null}
         <div
           className={cn(
             "flex w-fit max-w-full flex-col gap-1.5 rounded-lg px-4 py-3 shadow-panel transition-[width,max-width] duration-200",

@@ -13,6 +13,7 @@ import { useGroupStore } from "./groupStore";
 import { clientLogger } from "../services/clientLogger";
 import {
   type BridgeMessageInfo,
+  getBridgePresence,
   getBridgeGroup,
   getBridgeUserInfo,
   listBridgeConversationMessages,
@@ -71,6 +72,21 @@ function directConversationTitle(userId: string) {
 function rememberUser(user: User) {
   resolvedUsers.set(user.id, user);
   return user;
+}
+
+async function loadPresence(baseUrl: string, userIds: string[]) {
+  try {
+    return await getBridgePresence(baseUrl, userIds);
+  } catch {
+    return {};
+  }
+}
+
+async function resolveUserWithPresence(baseUrl: string, userId: string): Promise<User> {
+  const user = await getBridgeUserInfo(baseUrl, userId);
+  const presence = await loadPresence(baseUrl, [user.id]);
+  const online = presence[user.id];
+  return online === undefined ? user : { ...user, status: online ? "online" : "offline" };
 }
 
 function knownGroup(groupId?: string) {
@@ -170,7 +186,7 @@ function mapBackendConversation(item: BackendConversationInfo, friendById: Map<s
     type: isGroup ? "group" : "single",
     title: isGroup ? groupName ?? groupConversationTitle(groupId, item.conversationId) : friend?.nickname ?? `User ${peerUserId ?? item.conversationId}`,
     avatar: friend?.avatar,
-    online: isGroup ? undefined : friend ? friend.status === "online" : true,
+    online: isGroup ? undefined : friend ? friend.status === "online" : false,
     lastMessage: item.lastMessagePreview || "No messages yet",
     lastMessageAt: Number(item.lastMessageAt || item.updatedAt || Date.now()),
     unreadCount: item.unreadCount,
@@ -311,8 +327,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const missingPeerIds = conversations
       .map((item) => (item.peerUserId && item.peerUserId !== "0" && !friendById.has(item.peerUserId) ? item.peerUserId : ""))
       .filter((peerId): peerId is string => Boolean(peerId));
+    const peerIds = Array.from(
+      new Set(
+        conversations
+          .map((item) => (item.peerUserId && item.peerUserId !== "0" ? item.peerUserId : ""))
+          .filter((peerId): peerId is string => Boolean(peerId))
+      )
+    );
+    if (peerIds.length > 0) {
+      void loadPresence(settings.bridgeHttpUrl, peerIds)
+        .then((presence) => {
+          for (const [userId, online] of Object.entries(presence)) {
+            const cached = resolvedUsers.get(userId);
+            if (cached) {
+              resolvedUsers.set(userId, { ...cached, status: online ? "online" : "offline" });
+            }
+          }
+          set((state) => ({
+            conversations: state.conversations.map((conversation) =>
+              conversation.type === "single" && conversation.targetUserId && presence[conversation.targetUserId] !== undefined
+                ? { ...conversation, online: presence[conversation.targetUserId] }
+                : conversation
+            )
+          }));
+        })
+        .catch((error) => {
+          clientLogger.warn("Refresh conversation presence failed", error);
+        });
+    }
     for (const peerId of Array.from(new Set(missingPeerIds))) {
-      void getBridgeUserInfo(settings.bridgeHttpUrl, peerId)
+      void resolveUserWithPresence(settings.bridgeHttpUrl, peerId)
         .then(rememberUser)
         .then((user) => {
           set((state) => ({ conversations: state.conversations.map((conversation) => applyUserToConversation(conversation, user)) }));
@@ -356,7 +400,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       new Set(messages.map((message) => message.fromUserId).filter((fromUserId) => fromUserId !== userId && !knownUser(fromUserId)))
     );
     for (const senderId of missingSenderIds) {
-      void getBridgeUserInfo(settings.bridgeHttpUrl, senderId)
+      void resolveUserWithPresence(settings.bridgeHttpUrl, senderId)
         .then(rememberUser)
         .then((user) => {
           set((state) => ({
@@ -473,6 +517,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ? {
                 ...conversation,
                 title: group ? group.name : conversation.title,
+                online: message.groupId ? conversation.online : senderUser ? senderUser.status === "online" : conversation.online ?? false,
                 lastMessage: message.content,
                 lastMessageAt: message.createdAt,
                 unreadCount: isActive ? 0 : conversation.unreadCount + 1
@@ -485,7 +530,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           type: message.groupId ? "group" : "single",
           title: message.groupId ? groupConversationTitle(message.groupId) : senderUser?.nickname ?? directConversationTitle(message.fromUserId),
           avatar: senderUser?.avatar,
-          online: true,
+          online: message.groupId ? undefined : senderUser ? senderUser.status === "online" : false,
           lastMessage: message.content,
           lastMessageAt: message.createdAt,
           unreadCount: isActive ? 0 : 1,
@@ -518,7 +563,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (senderUser) {
       applyResolvedUser(senderUser);
     } else {
-      void getBridgeUserInfo(settings.bridgeHttpUrl, message.fromUserId)
+      void resolveUserWithPresence(settings.bridgeHttpUrl, message.fromUserId)
         .then(rememberUser)
         .then(applyResolvedUser)
         .catch((error) => {

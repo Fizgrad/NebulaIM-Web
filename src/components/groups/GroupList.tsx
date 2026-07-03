@@ -1,10 +1,11 @@
 import { FormEvent, useMemo, useState } from "react";
-import { LogIn, Plus, Search, UsersRound } from "lucide-react";
+import { CheckCircle2, LogIn, Plus, Search, UsersRound } from "lucide-react";
 import type { Group } from "../../types/group";
 import { GroupCard } from "./GroupCard";
 import { Button } from "../common/Button";
 import { Input } from "../common/Input";
 import { Card } from "../common/Card";
+import { Badge } from "../common/Badge";
 import { useGroupStore } from "../../store/groupStore";
 
 type GroupListProps = {
@@ -13,10 +14,22 @@ type GroupListProps = {
 };
 
 export function GroupList({ onMessage, onMembers }: GroupListProps) {
-  const { groups, createGroup, joinGroup, leaveGroup, isLoading, error } = useGroupStore();
+  const {
+    groups,
+    groupSearchResults,
+    createGroup,
+    joinGroup,
+    leaveGroup,
+    searchGroups,
+    clearGroupSearch,
+    isLoading,
+    isSearching,
+    error
+  } = useGroupStore();
   const [query, setQuery] = useState("");
   const [groupName, setGroupName] = useState("");
-  const [joinId, setJoinId] = useState("");
+  const [joinQuery, setJoinQuery] = useState("");
+  const [hasSearchedGroups, setHasSearchedGroups] = useState(false);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -28,6 +41,7 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
         group.ownerId.includes(keyword)
     );
   }, [groups, query]);
+  const joinedGroupIds = useMemo(() => new Set(groups.map((group) => group.id)), [groups]);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,12 +54,28 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
     }
   }
 
-  async function handleJoin(event: FormEvent<HTMLFormElement>) {
+  async function handleSearchJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!joinId.trim()) return;
+    const keyword = joinQuery.trim();
+    if (!keyword) {
+      setHasSearchedGroups(false);
+      clearGroupSearch();
+      return;
+    }
     try {
-      await joinGroup(joinId.trim());
-      setJoinId("");
+      setHasSearchedGroups(true);
+      await searchGroups(keyword);
+    } catch {
+      // Store owns the displayed error state.
+    }
+  }
+
+  async function handleJoinResult(groupId: string) {
+    try {
+      await joinGroup(groupId);
+      if (joinQuery.trim()) {
+        await searchGroups(joinQuery.trim());
+      }
     } catch {
       // Store owns the displayed error state.
     }
@@ -70,7 +100,6 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
                 group={group}
                 onMessage={onMessage}
                 onMembers={onMembers}
-                onJoin={joinGroup}
                 onLeave={leaveGroup}
               />
             ))}
@@ -111,19 +140,53 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
               </span>
               <h3 className="text-sm font-semibold text-nebula-text">Join Group</h3>
             </div>
-            <form className="space-y-3" onSubmit={handleJoin}>
+            <form className="space-y-3" onSubmit={handleSearchJoin}>
               <Input
-                label="Group ID"
-                value={joinId}
-                onChange={(event) => setJoinId(event.target.value)}
-                placeholder="numeric group id"
-                inputMode="numeric"
+                label="Group Name or ID"
+                value={joinQuery}
+                onChange={(event) => setJoinQuery(event.target.value)}
+                placeholder="search group name or numeric id"
+                icon={<Search className="h-4 w-4" />}
               />
-              <Button type="submit" variant="outline" disabled={isLoading} className="h-11 w-full">
-                <LogIn className="h-4 w-4" />
-                Join Group
+              <Button type="submit" variant="outline" disabled={isLoading || isSearching} className="h-11 w-full">
+                <Search className="h-4 w-4" />
+                {isSearching ? "Searching" : "Search Groups"}
               </Button>
             </form>
+            <div className="mt-4 space-y-2">
+              {groupSearchResults.map((group) => {
+                const joined = joinedGroupIds.has(group.id);
+                return (
+                  <div key={group.id} className="rounded-lg border border-nebula-border bg-white/[0.04] p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="truncate text-sm font-semibold text-nebula-text">{group.name}</h4>
+                          <Badge tone="slate">ID {group.id}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-nebula-muted">{group.memberCount} members</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant={joined ? "secondary" : "outline"}
+                        size="sm"
+                        disabled={isLoading || joined}
+                        onClick={() => void handleJoinResult(group.id)}
+                        className="shrink-0"
+                      >
+                        {joined ? <CheckCircle2 className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}
+                        {joined ? "Joined" : "Join"}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+              {hasSearchedGroups && !isSearching && groupSearchResults.length === 0 ? (
+                <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-3 text-xs text-nebula-muted">
+                  No groups match this search.
+                </div>
+              ) : null}
+            </div>
           </Card>
         </div>
       </div>

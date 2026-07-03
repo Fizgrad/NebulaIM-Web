@@ -29,6 +29,18 @@ function responseTone(code: number) {
   return code === 0 ? "emerald" : "amber";
 }
 
+function formatAdminTime(value: string | number) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "unknown";
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(new Date(numeric));
+}
+
 export function AdminPage() {
   const bridgeHttpUrl = useSettingsStore((state) => state.bridgeHttpUrl);
   const { adminToken, overview, cleanupResult, isLoading, error, setAdminToken, clearAdminToken, loadOverview, runCleanup } =
@@ -48,6 +60,11 @@ export function AdminPage() {
   useEffect(() => {
     setTokenInput(adminToken);
   }, [adminToken]);
+
+  useEffect(() => {
+    if (!adminToken.trim() || overview || isLoading) return;
+    void loadOverview();
+  }, [adminToken, overview, isLoading, loadOverview]);
 
   function handleTokenSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -196,6 +213,63 @@ export function AdminPage() {
               </Card>
             </div>
 
+            <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
+              <Card className="p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-semibold text-nebula-text">Service Overview</h2>
+                    <p className="mt-1 text-sm text-nebula-muted">AdminService GetServiceOverview.</p>
+                  </div>
+                  <Badge tone={responseTone(overview.serviceOverview.response.code)}>{overview.serviceOverview.response.message}</Badge>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {overview.serviceOverview.services.map((service) => (
+                    <div key={`${service.name}-${service.address}`} className="rounded-lg border border-nebula-border bg-white/[0.04] p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-nebula-text">{service.name}</p>
+                          <p className="mt-1 truncate text-xs text-nebula-muted">{service.address}</p>
+                        </div>
+                        <Badge tone={healthTone(service.state)}>{service.state}</Badge>
+                      </div>
+                      {service.detail ? <p className="mt-2 text-xs text-slate-400">{service.detail}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              <Card className="p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-semibold text-nebula-text">Audit Events</h2>
+                    <p className="mt-1 text-sm text-nebula-muted">AdminService ListAuditEvents.</p>
+                  </div>
+                  <Badge tone={responseTone(overview.auditEvents.response.code)}>{overview.auditEvents.response.message}</Badge>
+                </div>
+                <div className="space-y-3">
+                  {overview.auditEvents.events.length > 0 ? (
+                    overview.auditEvents.events.map((event) => (
+                      <div key={`${event.requestId}-${event.timestampMs}`} className="rounded-lg border border-nebula-border bg-white/[0.04] p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-nebula-text">{event.action}</p>
+                            <p className="mt-1 truncate text-xs text-nebula-muted">{event.principal || "unknown principal"}</p>
+                          </div>
+                          <Badge tone={event.decision === "allow" ? "emerald" : "red"}>{event.decision}</Badge>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-400">{event.scope || "no scope"} - {event.detail || "no detail"}</p>
+                        <p className="mt-1 text-xs text-slate-500">{formatAdminTime(event.timestampMs)}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-lg border border-nebula-border bg-white/[0.04] p-4 text-sm text-nebula-muted">
+                      No audit events returned by AdminService.
+                    </p>
+                  )}
+                </div>
+              </Card>
+            </div>
+
             <div className="grid gap-5 xl:grid-cols-2">
               <Card className="p-5">
                 <div className="flex items-center justify-between gap-3">
@@ -237,7 +311,7 @@ export function AdminPage() {
                     ))
                   ) : (
                     <p className="rounded-lg border border-nebula-border bg-white/[0.04] p-4 text-sm text-nebula-muted">
-                      No Kafka lag entries returned. The backend may return MOCKED, or the token may not include `kafka` scope.
+                      No Kafka lag entries returned by AdminService.
                     </p>
                   )}
                 </div>

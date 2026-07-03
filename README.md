@@ -42,7 +42,7 @@ Bridge HTTP:       window.location.origin
 Gateway WebSocket: ws(s)://window.location.host/ws
 ```
 
-Persisted browser settings are migrated away from the old `localhost:9000` and `localhost:8080` defaults by settings version `8`.
+Settings schema version `9` normalizes persisted endpoints to the current same-origin production defaults and the local Bridge defaults used by Vite development.
 
 ## Tech Stack
 
@@ -65,7 +65,7 @@ Persisted browser settings are migrated away from the old `localhost:9000` and `
 - `/register` Gateway `REGISTER_REQ` over Bridge `/ws`
 - `/app/chat` conversation list, direct chat, group chat, Gateway heartbeat, ACK state and PUSH messages
 - `/app/contacts` RelationService friends plus incoming and outgoing friend requests
-- `/app/groups` RelationService groups
+- `/app/groups` RelationService groups with create, search, join, leave and member views
 - `/app/profile` current user and Gateway metadata
 - `/app/settings` Gateway WebSocket and Bridge HTTP endpoint controls
 - `/dashboard` Bridge health and AdminService live metrics
@@ -77,16 +77,18 @@ Persisted browser settings are migrated away from the old `localhost:9000` and `
 - Browser-side PacketHeader encoder/decoder in `src/services/browserPacketCodec.ts`.
 - Browser-side Protobuf loading in `src/services/browserProtoRegistry.ts`.
 - Gateway client implementation in `src/services/directGatewayClient.ts`.
-- Bridge HTTP API layer for UserService, RelationService, MessageService, ConversationService and AdminService.
+- Bridge HTTP API layer for UserService, RelationService, MessageService, ConversationService, GatewayService presence and AdminService.
 - Relation workflow based on friend requests: send, list incoming/outgoing, accept and reject.
+- Friend requests can target either username or numeric backend `user_id`.
+- Group joining can search by group name or numeric group ID before sending the join request.
 - Conversation and message state backed by Gateway pushes, MessageService send APIs and Bridge message history loading.
 - Zustand stores split by domain.
 - Local persistence for auth token and settings.
 - Token expiry tracking and refresh through UserService.
 - HTTP request IDs and trace IDs.
 - HTTP retry and message retry actions.
-- Dashboard metrics loaded from AdminService.
-- Admin console for health, system stats, outbox stats, Kafka lag and cleanup.
+- Dashboard metrics loaded from AdminService health, system stats, service overview and audit events.
+- Admin console for health, system stats, service overview, audit events, outbox stats, Kafka lag and cleanup.
 
 ## Directory Structure
 
@@ -102,6 +104,8 @@ nebulaim-web/
 │   │       ├── authRoutes.ts
 │   │       ├── relationRoutes.ts
 │   │       ├── conversationRoutes.ts
+│   │       ├── messageRoutes.ts
+│   │       ├── presenceRoutes.ts
 │   │       └── adminRoutes.ts
 ├── proto/
 ├── public/
@@ -148,13 +152,13 @@ Open:
 http://localhost:5173
 ```
 
-Local development defaults still point at the production host unless overridden by env vars:
+Local development defaults point at a Bridge running on `127.0.0.1:8080`. Override them when Vite should connect to a different Bridge:
 
 ```bash
-VITE_GATEWAY_WS_URL=ws://localhost:8080/ws VITE_BRIDGE_HTTP_URL=http://localhost:8080 npm run dev
+VITE_GATEWAY_WS_URL=ws://<bridge-host>:8080/ws VITE_BRIDGE_HTTP_URL=http://<bridge-host>:8080 npm run dev
 ```
 
-Use those overrides when your local Bridge can reach a local Gateway.
+Use those overrides only for the browser-facing Bridge endpoint. The Bridge itself reaches backend services through its own environment configuration.
 
 ## Build
 
@@ -237,6 +241,7 @@ GET  /info
 WS   /ws
 
 POST /api/auth/refresh
+POST /api/auth/register
 GET  /api/auth/users/:userId
 GET  /api/auth/users/by-username/:username
 
@@ -245,11 +250,21 @@ GET  /api/relation/friend-requests?userId=<id>&incoming=true&status=0
 POST /api/relation/friend-requests
 POST /api/relation/friend-requests/:requestId/accept
 POST /api/relation/friend-requests/:requestId/reject
+POST /api/relation/friends
 DELETE /api/relation/friends/:friendId?userId=<id>
+GET  /api/relation/groups?userId=<id>
+GET  /api/relation/groups/search?q=<name-or-id>&limit=20
 POST /api/relation/groups
 POST /api/relation/groups/:groupId/join
 POST /api/relation/groups/:groupId/leave
+GET  /api/relation/groups/:groupId
 GET  /api/relation/groups/:groupId/members
+
+GET  /api/messages/conversations/:conversationId?userId=<id>&limit=50
+POST /api/messages/single
+POST /api/messages/group
+
+GET  /api/presence/users?userIds=<id>,<id>
 
 GET    /api/conversations?userId=<id>&page=1&pageSize=50
 POST   /api/conversations/:conversationId/read
@@ -261,6 +276,8 @@ GET  /api/admin/health
 GET  /api/admin/system-stats
 GET  /api/admin/outbox-stats
 GET  /api/admin/kafka-lag
+GET  /api/admin/service-overview
+GET  /api/admin/audit-events?limit=20
 POST /api/admin/cleanup
 ```
 

@@ -122,6 +122,12 @@ const optionalUserIdQuerySchema = z.object({
   userId: numericIdSchema.optional()
 });
 
+const searchGroupsQuerySchema = z.object({
+  q: z.string().trim().min(1, "Search text is required.").max(128, "Search text is too long."),
+  userId: numericIdSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(12)
+});
+
 const addFriendSchema = z.object({
   userId: numericIdSchema,
   friendId: numericIdSchema
@@ -324,6 +330,21 @@ export function createRelationRouter(): Router {
     }
   });
 
+  router.get("/groups/search", async (req, res) => {
+    const parsed = searchGroupsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid group search query.");
+      return;
+    }
+
+    try {
+      const groups = await searchGroups(parsed.data.q, parsed.data.limit);
+      res.json({ ok: true, groups });
+    } catch (error) {
+      sendGroupLookupError(res, "Group search is unavailable.", error);
+    }
+  });
+
   router.post("/groups", async (req, res) => {
     const parsed = createGroupSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -423,6 +444,38 @@ async function listGroupsForUser(userId: string): Promise<GroupInfo[]> {
      GROUP BY g.id, g.group_name, g.owner_id, g.created_at, g.updated_at
      ORDER BY g.updated_at DESC, g.id DESC`,
     [userId]
+  );
+  return rows.map(toGroupInfo);
+}
+
+async function searchGroups(query: string, limit: number): Promise<GroupInfo[]> {
+  if (!hasMysqlConfig()) {
+    throw new Error("MySQL group lookup connection is not configured.");
+  }
+
+  const keyword = query.trim();
+  const likePattern = `%${keyword}%`;
+  const prefixPattern = `${keyword}%`;
+  const exactId = /^\d+$/.test(keyword) ? Number(keyword) : 0;
+  const hasExactId = exactId > 0 ? 1 : 0;
+  const safeLimit = Math.max(1, Math.min(50, Math.floor(limit)));
+  const [rows] = await getMysqlPool().execute<GroupRow[]>(
+    `SELECT g.id, g.group_name, g.owner_id, g.created_at, g.updated_at, COUNT(gm.user_id) AS member_count
+     FROM \`groups\` g
+     LEFT JOIN group_members gm ON gm.group_id = g.id
+     WHERE g.group_name LIKE ?
+        OR (? = 1 AND g.id = ?)
+     GROUP BY g.id, g.group_name, g.owner_id, g.created_at, g.updated_at
+     ORDER BY
+       CASE
+         WHEN g.group_name = ? THEN 0
+         WHEN g.group_name LIKE ? THEN 1
+         ELSE 2
+       END,
+       g.updated_at DESC,
+       g.id DESC
+     LIMIT ${safeLimit}`,
+    [likePattern, hasExactId, exactId, keyword, prefixPattern]
   );
   return rows.map(toGroupInfo);
 }

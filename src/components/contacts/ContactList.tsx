@@ -28,6 +28,7 @@ export function ContactList({ onMessage }: ContactListProps) {
     error,
     notice,
     loadFriends,
+    refreshPresence,
     clearNotice
   } = useContactStore();
   const [query, setQuery] = useState("");
@@ -37,6 +38,13 @@ export function ContactList({ onMessage }: ContactListProps) {
   useEffect(() => {
     void loadFriends();
   }, [loadFriends]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshPresence();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [refreshPresence]);
 
   useEffect(() => {
     if (!notice) return;

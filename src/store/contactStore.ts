@@ -4,6 +4,7 @@ import type { User } from "../types/user";
 import {
   acceptBridgeFriendRequest,
   deleteBridgeFriend,
+  getBridgePresence,
   getBridgeUserByUsername,
   getBridgeUserInfo,
   listBridgeFriendRequests,
@@ -28,6 +29,7 @@ type ContactState = {
   error: string | null;
   notice: string | null;
   loadFriends: () => Promise<void>;
+  refreshPresence: () => Promise<void>;
   sendFriendRequest: (identifier: string, message?: string) => Promise<void>;
   acceptFriendRequest: (requestId: string) => Promise<void>;
   rejectFriendRequest: (requestId: string) => Promise<void>;
@@ -67,6 +69,30 @@ function fallbackUser(userId: string): User {
   };
 }
 
+async function loadPresence(baseUrl: string, userIds: string[]) {
+  try {
+    return await getBridgePresence(baseUrl, userIds);
+  } catch {
+    return {};
+  }
+}
+
+function applyPresence(user: User, presence: Record<string, boolean>): User {
+  const online = presence[user.id];
+  if (online === undefined) return user;
+  return {
+    ...user,
+    status: online ? "online" : "offline"
+  };
+}
+
+function applyRequestPresence(request: FriendRequestView, presence: Record<string, boolean>): FriendRequestView {
+  return {
+    ...request,
+    peer: applyPresence(request.peer, presence)
+  };
+}
+
 async function hydrateRequests(baseUrl: string, requests: BridgeFriendRequest[], currentUserId: string, direction: "incoming" | "outgoing") {
   return Promise.all(
     requests.map(async (request): Promise<FriendRequestView> => {
@@ -103,10 +129,35 @@ export const useContactStore = create<ContactState>((set) => ({
         hydrateRequests(settings.bridgeHttpUrl, incoming, userId, "incoming"),
         hydrateRequests(settings.bridgeHttpUrl, outgoing, userId, "outgoing")
       ]);
-      set({ contacts, incomingRequests, outgoingRequests, isLoading: false, error: null });
+      const presence = await loadPresence(settings.bridgeHttpUrl, [
+        ...contacts.map((contact) => contact.id),
+        ...incomingRequests.map((request) => request.peer.id),
+        ...outgoingRequests.map((request) => request.peer.id)
+      ]);
+      set({
+        contacts: contacts.map((contact) => applyPresence(contact, presence)),
+        incomingRequests: incomingRequests.map((request) => applyRequestPresence(request, presence)),
+        outgoingRequests: outgoingRequests.map((request) => applyRequestPresence(request, presence)),
+        isLoading: false,
+        error: null
+      });
     } catch (error) {
       set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to load friends." });
     }
+  },
+  refreshPresence: async () => {
+    const settings = useSettingsStore.getState();
+    const state = useContactStore.getState();
+    const presence = await loadPresence(settings.bridgeHttpUrl, [
+      ...state.contacts.map((contact) => contact.id),
+      ...state.incomingRequests.map((request) => request.peer.id),
+      ...state.outgoingRequests.map((request) => request.peer.id)
+    ]);
+    set((current) => ({
+      contacts: current.contacts.map((contact) => applyPresence(contact, presence)),
+      incomingRequests: current.incomingRequests.map((request) => applyRequestPresence(request, presence)),
+      outgoingRequests: current.outgoingRequests.map((request) => applyRequestPresence(request, presence))
+    }));
   },
   sendFriendRequest: async (identifier, message = "") => {
     const settings = useSettingsStore.getState();
@@ -126,9 +177,13 @@ export const useContactStore = create<ContactState>((set) => ({
         hydrateRequests(settings.bridgeHttpUrl, incoming, currentUserId, "incoming"),
         hydrateRequests(settings.bridgeHttpUrl, outgoing, currentUserId, "outgoing")
       ]);
+      const presence = await loadPresence(settings.bridgeHttpUrl, [
+        ...incomingRequests.map((request) => request.peer.id),
+        ...outgoingRequests.map((request) => request.peer.id)
+      ]);
       set({
-        incomingRequests,
-        outgoingRequests,
+        incomingRequests: incomingRequests.map((request) => applyRequestPresence(request, presence)),
+        outgoingRequests: outgoingRequests.map((request) => applyRequestPresence(request, presence)),
         isSendingRequest: false,
         error: null,
         notice: "Friend request sent."
@@ -154,7 +209,19 @@ export const useContactStore = create<ContactState>((set) => ({
         hydrateRequests(settings.bridgeHttpUrl, incoming, currentUserId, "incoming"),
         hydrateRequests(settings.bridgeHttpUrl, outgoing, currentUserId, "outgoing")
       ]);
-      set({ contacts, incomingRequests, outgoingRequests, isLoading: false, error: null, notice: "Friend request accepted." });
+      const presence = await loadPresence(settings.bridgeHttpUrl, [
+        ...contacts.map((contact) => contact.id),
+        ...incomingRequests.map((request) => request.peer.id),
+        ...outgoingRequests.map((request) => request.peer.id)
+      ]);
+      set({
+        contacts: contacts.map((contact) => applyPresence(contact, presence)),
+        incomingRequests: incomingRequests.map((request) => applyRequestPresence(request, presence)),
+        outgoingRequests: outgoingRequests.map((request) => applyRequestPresence(request, presence)),
+        isLoading: false,
+        error: null,
+        notice: "Friend request accepted."
+      });
     } catch (error) {
       set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to accept friend request." });
       throw error;
@@ -169,7 +236,13 @@ export const useContactStore = create<ContactState>((set) => ({
       await rejectBridgeFriendRequest(settings.bridgeHttpUrl, currentUserId, friendRequestId);
       const incoming = await listBridgeFriendRequests(settings.bridgeHttpUrl, currentUserId, true, 0);
       const incomingRequests = await hydrateRequests(settings.bridgeHttpUrl, incoming, currentUserId, "incoming");
-      set({ incomingRequests, isLoading: false, error: null, notice: "Friend request rejected." });
+      const presence = await loadPresence(settings.bridgeHttpUrl, incomingRequests.map((request) => request.peer.id));
+      set({
+        incomingRequests: incomingRequests.map((request) => applyRequestPresence(request, presence)),
+        isLoading: false,
+        error: null,
+        notice: "Friend request rejected."
+      });
     } catch (error) {
       set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to reject friend request." });
       throw error;

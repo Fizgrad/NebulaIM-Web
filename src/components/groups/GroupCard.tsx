@@ -1,4 +1,4 @@
-import { LogIn, LogOut, MessageSquare, UsersRound } from "lucide-react";
+import { LogOut, MessageSquare, UsersRound } from "lucide-react";
 import type { Group } from "../../types/group";
 import { Badge } from "../common/Badge";
 import { Button } from "../common/Button";
@@ -9,11 +9,10 @@ type GroupCardProps = {
   group: Group;
   onMessage: (group: Group) => void;
   onMembers: (group: Group) => void;
-  onJoin: (groupId: string) => void;
   onLeave: (groupId: string) => void;
 };
 
-export function GroupCard({ group, onMessage, onMembers, onJoin, onLeave }: GroupCardProps) {
+export function GroupCard({ group, onMessage, onMembers, onLeave }: GroupCardProps) {
   return (
     <Card className="p-4">
       <div className="flex items-start gap-4">
@@ -35,10 +34,6 @@ export function GroupCard({ group, onMessage, onMembers, onJoin, onLeave }: Grou
             <Button variant="secondary" size="sm" onClick={() => onMembers(group)}>
               <UsersRound className="h-4 w-4" />
               Members
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => onJoin(group.id)}>
-              <LogIn className="h-4 w-4" />
-              Join
             </Button>
             <Button variant="danger" size="sm" onClick={() => onLeave(group.id)}>
               <LogOut className="h-4 w-4" />

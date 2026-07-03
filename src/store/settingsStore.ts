@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 
 export type ThemeMode = "dark" | "light" | "system";
 
-const publicHost = "example.invalid";
+const developmentBridgeHost = "127.0.0.1:8080";
 
 type SettingsState = {
   theme: ThemeMode;
@@ -23,41 +23,70 @@ type SettingsState = {
 
 const defaults = {
   theme: "dark" as ThemeMode,
-  gatewayUrl: `tcp://${publicHost}:9000`,
+  gatewayUrl: defaultGatewayUrl(),
   directGatewayWsUrl: import.meta.env.VITE_GATEWAY_WS_URL ?? defaultDirectGatewayWsUrl(),
   bridgeHttpUrl: import.meta.env.VITE_BRIDGE_HTTP_URL ?? defaultBridgeHttpUrl(),
   autoReconnect: true,
   heartbeatIntervalMs: 15000
 };
 
+function isDevServer() {
+  return typeof window !== "undefined" && ["5173", "5174"].includes(window.location.port);
+}
+
+function defaultGatewayUrl() {
+  const host = typeof window === "undefined" || isDevServer() ? "127.0.0.1" : window.location.hostname;
+  return `tcp://${host}:9000`;
+}
+
 function defaultDirectGatewayWsUrl() {
-  if (typeof window === "undefined") return `ws://${publicHost}:8080/ws`;
+  if (typeof window === "undefined") return `ws://${developmentBridgeHost}/ws`;
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  if (["5173", "5174"].includes(window.location.port)) return `ws://${publicHost}:8080/ws`;
+  if (isDevServer()) return `ws://${developmentBridgeHost}/ws`;
   return `${protocol}//${window.location.host}/ws`;
 }
 
 function defaultBridgeHttpUrl() {
-  if (typeof window === "undefined") return `http://${publicHost}:8080`;
-  if (["5173", "5174"].includes(window.location.port)) return `http://${publicHost}:8080`;
+  if (typeof window === "undefined") return `http://${developmentBridgeHost}`;
+  if (isDevServer()) return `http://${developmentBridgeHost}`;
   return window.location.origin;
 }
 
 function normalizeGatewayUrl(value: string | undefined) {
-  if (!value || value === "tcp://localhost:9000" || value === "tcp://127.0.0.1:9000") return defaults.gatewayUrl;
+  if (!value || value === "tcp://localhost:9000" || value === "tcp://127.0.0.1:9000" || isExternalPersistedGatewayUrl(value)) {
+    return defaults.gatewayUrl;
+  }
   return value;
 }
 
+function isExternalPersistedGatewayUrl(value: string) {
+  if (typeof window === "undefined" || isDevServer()) return false;
+  const match = /^tcp:\/\/([^:/]+)(?::\d+)?$/i.exec(value);
+  return Boolean(match && match[1] !== window.location.hostname);
+}
+
 function normalizeDirectGatewayWsUrl(value: string | undefined) {
-  if (!value || value === "ws://localhost:9000/" || value === "ws://127.0.0.1:9000/") {
+  if (!value || value === "ws://localhost:9000/" || value === "ws://127.0.0.1:9000/" || isExternalPersistedUrl(value)) {
     return defaults.directGatewayWsUrl;
   }
   return value;
 }
 
 function normalizeBridgeHttpUrl(value: string | undefined) {
-  if (!value || value === "http://localhost:8080" || value === "http://127.0.0.1:8080") return defaults.bridgeHttpUrl;
+  if (!value || value === "http://localhost:8080" || value === "http://127.0.0.1:8080" || isExternalPersistedUrl(value)) {
+    return defaults.bridgeHttpUrl;
+  }
   return value;
+}
+
+function isExternalPersistedUrl(value: string) {
+  if (typeof window === "undefined" || isDevServer()) return false;
+  try {
+    const url = new URL(value);
+    return url.host !== window.location.host;
+  } catch {
+    return false;
+  }
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -74,7 +103,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "nebulaim-settings",
-      version: 8,
+      version: 9,
       merge: (persistedState, currentState) => {
         const state = persistedState as Partial<SettingsState> | undefined;
         return {

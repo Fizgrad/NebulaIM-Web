@@ -2,8 +2,10 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   getAdminHealth,
+  getAdminAuditEvents,
   getAdminKafkaLag,
   getAdminOutboxStats,
+  getAdminServiceOverview,
   getAdminSystemStats,
   runAdminCleanup
 } from "../api/adminApi";
@@ -41,14 +43,16 @@ export const useAdminStore = create<AdminState>()(
         const baseUrl = useSettingsStore.getState().bridgeHttpUrl;
         set({ isLoading: true, error: null });
         try {
-          const [health, systemStats, outboxStats, kafkaLag] = await Promise.all([
+          const [health, systemStats, outboxStats, kafkaLag, serviceOverview, auditEvents] = await Promise.all([
             getAdminHealth(baseUrl, adminToken),
             getAdminSystemStats(baseUrl, adminToken),
             getAdminOutboxStats(baseUrl, adminToken),
-            getAdminKafkaLag(baseUrl, adminToken)
+            getAdminKafkaLag(baseUrl, adminToken),
+            getAdminServiceOverview(baseUrl, adminToken),
+            getAdminAuditEvents(baseUrl, adminToken, 20)
           ]);
           set({
-            overview: { health, systemStats, outboxStats, kafkaLag },
+            overview: { health, systemStats, outboxStats, kafkaLag, serviceOverview, auditEvents },
             isLoading: false,
             error: null
           });

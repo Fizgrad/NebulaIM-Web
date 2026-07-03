@@ -9,6 +9,7 @@ import { createAdminRouter } from "./adminRoutes.js";
 import { createAuthRouter } from "./authRoutes.js";
 import { createConversationRouter } from "./conversationRoutes.js";
 import { createMessageRouter } from "./messageRoutes.js";
+import { createPresenceRouter } from "./presenceRoutes.js";
 import { createRelationRouter } from "./relationRoutes.js";
 
 export function createHttpServer(config: BridgeConfig): http.Server {
@@ -40,6 +41,7 @@ export function createHttpServer(config: BridgeConfig): http.Server {
   app.use("/api/messages", createMessageRouter());
   app.use("/api/relation", createRelationRouter());
   app.use("/api/conversations", createConversationRouter());
+  app.use("/api/presence", createPresenceRouter());
   app.use("/api/admin", createAdminRouter());
 
   if (config.webStaticDir && fs.existsSync(path.join(config.webStaticDir, "index.html"))) {

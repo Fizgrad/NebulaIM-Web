@@ -13,7 +13,7 @@ async function authenticate(page: Page) {
             avatarColor: "from-violet-500 to-cyan-400",
             status: "online",
             registeredAt: 0,
-            gateway: "ws://example.invalid:8080/ws",
+            gateway: "/ws",
             connectionId: "gateway-10001"
           },
           token: "e2e-token",
@@ -42,8 +42,8 @@ test("settings page shows Bridge HTTP and Gateway WebSocket defaults", async ({ 
 
   await page.goto("/app/settings");
 
-  await expect(page.getByLabel("Direct Gateway WebSocket URL")).toHaveValue("ws://example.invalid:8080/ws");
-  await expect(page.getByLabel("Bridge HTTP URL")).toHaveValue("http://example.invalid:8080");
+  await expect(page.getByLabel("Direct Gateway WebSocket URL")).toHaveValue("ws://127.0.0.1:8080/ws");
+  await expect(page.getByLabel("Bridge HTTP URL")).toHaveValue("http://127.0.0.1:8080");
 });
 
 test("system tools stay out of the primary client navigation", async ({ page }) => {

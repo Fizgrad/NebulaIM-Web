@@ -100,7 +100,12 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
           Today
         </div>
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} onRetry={(messageId) => void retryMessage(conversation.id, messageId)} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            showSenderName={conversation.type === "group" && !message.isMine}
+            onRetry={(messageId) => void retryMessage(conversation.id, messageId)}
+          />
         ))}
       </div>
 

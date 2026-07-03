@@ -30,12 +30,15 @@
 html {
   min-height: 100%;
   background: rgb(var(--nebula-bg));
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
 body {
   min-height: 100vh;
   margin: 0;
   background: rgb(var(--nebula-bg));
+  overflow-x: hidden;
 }
 
 #root {
@@ -54,8 +57,9 @@ body {
 }
 
 .mobile-bottom-nav {
-  min-height: calc(4.5rem + env(safe-area-inset-bottom));
+  height: calc(4.5rem + env(safe-area-inset-bottom));
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  contain: layout paint;
 }
 
 .chat-viewport {

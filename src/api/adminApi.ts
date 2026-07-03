@@ -4,6 +4,8 @@ import type {
   AdminHealth,
   AdminKafkaLagInfo,
   AdminOutboxStats,
+  AdminAuditEvents,
+  AdminServiceOverview,
   AdminSystemStats
 } from "../types/admin";
 import { createTraceHeaders } from "../utils/trace";
@@ -61,6 +63,29 @@ export async function getAdminKafkaLag(baseUrl: string, adminToken: string) {
     () =>
       httpClient.get<AdminApiEnvelope<AdminKafkaLagInfo>>(`${baseUrl.replace(/\/$/, "")}/api/admin/kafka-lag`, {
         headers: adminHeaders(adminToken)
+      }),
+    { retries: 1 }
+  );
+  return unwrap(response.data);
+}
+
+export async function getAdminServiceOverview(baseUrl: string, adminToken: string) {
+  const response = await requestWithRetry(
+    () =>
+      httpClient.get<AdminApiEnvelope<AdminServiceOverview>>(`${baseUrl.replace(/\/$/, "")}/api/admin/service-overview`, {
+        headers: adminHeaders(adminToken)
+      }),
+    { retries: 1 }
+  );
+  return unwrap(response.data);
+}
+
+export async function getAdminAuditEvents(baseUrl: string, adminToken: string, limit = 20) {
+  const response = await requestWithRetry(
+    () =>
+      httpClient.get<AdminApiEnvelope<AdminAuditEvents>>(`${baseUrl.replace(/\/$/, "")}/api/admin/audit-events`, {
+        headers: adminHeaders(adminToken),
+        params: { limit }
       }),
     { retries: 1 }
   );

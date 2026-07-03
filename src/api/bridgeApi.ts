@@ -41,6 +41,18 @@ type GetBridgeUserResponse = {
 
 type RelationUserInfo = BridgeUserInfo;
 
+type BridgePresenceInfo = {
+  userId: string;
+  online: boolean;
+  gatewayId?: string;
+  connectionId?: string;
+};
+
+type GetBridgePresenceResponse = {
+  ok: boolean;
+  users: BridgePresenceInfo[];
+};
+
 export type BridgeFriendRequestStatus = 0 | 1 | 2 | 3;
 
 export type BridgeFriendRequest = {
@@ -226,7 +238,7 @@ export async function getBridgeUserInfo(baseUrl: string, userId: string): Promis
     nickname: user.nickname || user.username || `User ${user.userId}`,
     avatar: user.avatar || undefined,
     avatarColor: "from-cyan-500 to-blue-500",
-    status: "online",
+    status: "offline",
     registeredAt: Number(user.createdAt ?? Date.now()),
     gateway: "UserService",
     connectionId: `user-${user.userId}`
@@ -247,7 +259,7 @@ export async function getBridgeUserByUsername(baseUrl: string, username: string)
     nickname: user.nickname || user.username || `User ${user.userId}`,
     avatar: user.avatar || undefined,
     avatarColor: "from-cyan-500 to-blue-500",
-    status: "online",
+    status: "offline",
     registeredAt: Number(user.createdAt ?? Date.now()),
     gateway: "UserService",
     connectionId: `user-${user.userId}`
@@ -262,6 +274,21 @@ export async function listBridgeFriends(baseUrl: string, userId: string): Promis
     )
   );
   return response.friends.map(toUser);
+}
+
+export async function getBridgePresence(baseUrl: string, userIds: string[]): Promise<Record<string, boolean>> {
+  const uniqueUserIds = Array.from(new Set(userIds.filter((userId) => /^\d+$/.test(userId))));
+  if (uniqueUserIds.length === 0) return {};
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.get<GetBridgePresenceResponse>(`${baseUrl.replace(/\/$/, "")}/api/presence/users`, {
+          params: { userIds: uniqueUserIds.join(",") }
+        }),
+      { retries: 1 }
+    )
+  );
+  return Object.fromEntries((response.users ?? []).map((user) => [user.userId, Boolean(user.online)]));
 }
 
 export async function addBridgeFriend(baseUrl: string, userId: string, friendId: string): Promise<void> {
@@ -384,6 +411,19 @@ export async function listBridgeGroups(baseUrl: string, userId: string): Promise
       () =>
         httpClient.get<ListBridgeGroupsResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups`, {
           params: { userId }
+        }),
+      { retries: 1 }
+    )
+  );
+  return (response.groups ?? []).map(toGroup);
+}
+
+export async function searchBridgeGroups(baseUrl: string, query: string, userId?: string): Promise<Group[]> {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.get<ListBridgeGroupsResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups/search`, {
+          params: { q: query, userId }
         }),
       { retries: 1 }
     )
@@ -522,7 +562,7 @@ function toUser(user: RelationUserInfo): User {
     nickname: user.nickname || user.username || `User ${user.userId}`,
     avatar: user.avatar || undefined,
     avatarColor: "from-cyan-500 to-blue-500",
-    status: "online",
+    status: "offline",
     registeredAt: Number(user.createdAt ?? Date.now()),
     gateway: "RelationService",
     connectionId: `user-${user.userId}`

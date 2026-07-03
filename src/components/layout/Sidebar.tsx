@@ -4,6 +4,7 @@ import { Logo } from "../brand/Logo";
 import { Avatar } from "../common/Avatar";
 import { Button } from "../common/Button";
 import { useAuthStore } from "../../store/authStore";
+import { useChatStore } from "../../store/chatStore";
 import { cn } from "../../utils/cn";
 
 const navItems = [
@@ -17,6 +18,7 @@ const navItems = [
 export function Sidebar() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const gatewayConnected = useChatStore((state) => state.gatewayStatus.state === "connected");
 
   return (
     <>
@@ -25,10 +27,10 @@ export function Sidebar() {
         <Logo className="hidden lg:flex" />
 
         <div className="mt-7 flex items-center justify-center gap-3 rounded-lg border border-nebula-border bg-white/[0.04] p-2 lg:justify-start">
-          <Avatar name={user?.nickname ?? "Operator"} color={user?.avatarColor} online />
+          <Avatar name={user?.nickname ?? "Operator"} color={user?.avatarColor} online={gatewayConnected} />
           <div className="hidden min-w-0 lg:block">
             <p className="truncate text-sm font-medium text-nebula-text">{user?.nickname ?? "Nebula Operator"}</p>
-            <p className="truncate text-xs text-nebula-muted">Gateway connected</p>
+            <p className="truncate text-xs text-nebula-muted">{gatewayConnected ? "Gateway connected" : "Gateway disconnected"}</p>
           </div>
         </div>
 
@@ -78,7 +80,7 @@ export function Sidebar() {
               to={item.path}
               className={({ isActive }) =>
                 cn(
-                  "flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[10px] font-medium transition",
+                  "flex h-14 min-w-0 flex-col items-center justify-center gap-1 px-1 text-[10px] font-medium leading-none transition-colors",
                   isActive ? "text-cyan-200" : "text-nebula-muted hover:text-nebula-text"
                 )
               }
