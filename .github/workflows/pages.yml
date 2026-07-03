@@ -73,7 +73,7 @@ jobs:
       - name: Add single-page app fallback
         run: |
           set -euo pipefail
-          cp dist/index.html dist/404.html
+          test -f dist/404.html
           touch dist/.nojekyll
 
       - name: Configure GitHub Pages

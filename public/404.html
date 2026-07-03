@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NebulaIM Web</title>
+    <script>
+      (function () {
+        var repoBase = "/NebulaIM-Web";
+        var path = window.location.pathname;
+        var base = "/";
+        var route = path || "/";
+
+        if (path === repoBase || path.indexOf(repoBase + "/") === 0) {
+          base = repoBase + "/";
+          route = path.slice(repoBase.length) || "/";
+        }
+
+        if (route.charAt(0) !== "/") {
+          route = "/" + route;
+        }
+
+        window.location.replace(base + "?redirect=" + encodeURIComponent(route + window.location.search + window.location.hash));
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

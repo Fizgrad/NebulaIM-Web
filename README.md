@@ -433,6 +433,8 @@ Use `/` for `PAGES_BASE_PATH` only when GitHub Pages serves a custom domain at t
 
 In repository settings, set Pages build and deployment source to GitHub Actions. The Bridge must allow the GitHub Pages origin through CORS and WebSocket origin checks.
 
+Direct page loads such as `/NebulaIM-Web/login` are handled by `public/404.html`, which redirects back to the Pages base path and restores the React Router route.
+
 ## Verification
 
 ```bash

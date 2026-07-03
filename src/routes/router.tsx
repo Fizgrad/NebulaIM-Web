@@ -17,6 +17,19 @@ function getRouterBasename() {
   return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 }
 
+function restoreGitHubPagesRedirect() {
+  if (typeof window === "undefined") return;
+
+  const params = new URLSearchParams(window.location.search);
+  const redirect = params.get("redirect");
+  if (!redirect || !redirect.startsWith("/") || redirect.startsWith("//")) return;
+
+  const basePath = getRouterBasename() ?? "";
+  window.history.replaceState(null, "", `${basePath}${redirect}`);
+}
+
+restoreGitHubPagesRedirect();
+
 export const router = createBrowserRouter([
   { path: "/", element: <LandingPage /> },
   { path: "/login", element: <LoginPage /> },
