@@ -1,16 +1,18 @@
 import protobuf from "protobufjs";
 
+const protoBasePath = import.meta.env.BASE_URL.endsWith("/") ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
+
 const protoFiles = [
-  "/proto/common.proto",
-  "/proto/user.proto",
-  "/proto/message.proto",
-  "/proto/relation.proto",
-  "/proto/conversation.proto",
-  "/proto/device.proto",
-  "/proto/push.proto",
-  "/proto/gateway.proto",
-  "/proto/admin.proto"
-];
+  "common.proto",
+  "user.proto",
+  "message.proto",
+  "relation.proto",
+  "conversation.proto",
+  "device.proto",
+  "push.proto",
+  "gateway.proto",
+  "admin.proto"
+].map((fileName) => `${protoBasePath}proto/${fileName}`);
 
 let rootPromise: Promise<protobuf.Root> | null = null;
 
