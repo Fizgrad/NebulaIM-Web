@@ -11,6 +11,12 @@ import { SettingsPage } from "../pages/SettingsPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { AdminPage } from "../pages/AdminPage";
 
+function getRouterBasename() {
+  const baseUrl = import.meta.env.BASE_URL;
+  if (!baseUrl || baseUrl === "/") return undefined;
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+}
+
 export const router = createBrowserRouter([
   { path: "/", element: <LandingPage /> },
   { path: "/login", element: <LoginPage /> },
@@ -31,4 +37,6 @@ export const router = createBrowserRouter([
   { path: "/dashboard", element: <DashboardPage /> },
   { path: "/admin", element: <AdminPage /> },
   { path: "*", element: <Navigate to="/" replace /> }
-]);
+], {
+  basename: getRouterBasename()
+});

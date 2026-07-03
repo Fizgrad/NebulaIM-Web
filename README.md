@@ -412,6 +412,27 @@ The workflow does not overwrite an existing server-side `bridge.env`. If `bridge
 
 The deploy user must be `root` or have passwordless `sudo` for writing the deploy path and restarting systemd. The server must also have Node.js and npm available for installing Bridge production dependencies.
 
+## GitHub Pages Deployment
+
+The workflow in `.github/workflows/pages.yml` builds only the static React app and publishes `dist/` to GitHub Pages. GitHub Pages does not run the Bridge, so the app must connect to an externally deployed Bridge over HTTPS and WSS.
+
+Set these repository variables before running the workflow:
+
+```text
+PAGES_BRIDGE_HTTP_URL   https://<bridge-host>
+PAGES_GATEWAY_WS_URL    wss://<bridge-host>/ws
+```
+
+Optional repository variable:
+
+```text
+PAGES_BASE_PATH         /NebulaIM-Web/
+```
+
+Use `/` for `PAGES_BASE_PATH` only when GitHub Pages serves a custom domain at the domain root. For the standard project page URL, keep `/NebulaIM-Web/`.
+
+In repository settings, set Pages build and deployment source to GitHub Actions. The Bridge must allow the GitHub Pages origin through CORS and WebSocket origin checks.
+
 ## Verification
 
 ```bash
