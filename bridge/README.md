@@ -219,7 +219,7 @@ Image upload request:
 }
 ```
 
-The upload response returns an absolute `url`. Send that URL with `contentType: "image"` through `/api/messages/single` or `/api/messages/group`. The Bridge accepts PNG, JPEG, WebP and GIF up to 5 MiB.
+The upload response returns an absolute `url`. Send that URL with `contentType: "image"` through `/api/messages/single` or `/api/messages/group`. The Bridge accepts PNG, JPEG, WebP and GIF up to 5 MiB. Image-plus-text sends are represented as two message sends: one image message followed by one text message.
 
 The Bridge forwards message send calls to `nebula.proto.MessageService` on `MESSAGE_SERVICE_HOST:MESSAGE_SERVICE_PORT`. The frontend uses these endpoints for sending messages so a refreshed browser session can send even when the Gateway WebSocket has not re-run `LOGIN_REQ`.
 
