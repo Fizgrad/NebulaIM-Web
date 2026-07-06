@@ -7,6 +7,7 @@ import {
   ChartNoAxesCombined,
   Database,
   Gauge,
+  Languages,
   MessageSquare,
   Network,
   Radio,
@@ -19,19 +20,20 @@ import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { Logo } from "../components/brand/Logo";
 import { NebulaBackground } from "../components/brand/NebulaBackground";
-import { useI18n, type TranslationKey } from "../i18n";
+import { languageOptions, useI18n, type TranslationKey } from "../i18n";
+import { cn } from "../utils/cn";
 
 const stack = ["React", "TypeScript", "Vite", "Tailwind CSS", "Zustand", "React Router", "Axios"];
 
 const capabilities = [
-  { titleKey: "landing.capability.gateway", icon: Gauge },
-  { titleKey: "landing.capability.protocol", icon: Binary },
-  { titleKey: "landing.capability.messaging", icon: Network },
-  { titleKey: "landing.capability.kafka", icon: Workflow },
-  { titleKey: "landing.capability.presence", icon: Radio },
-  { titleKey: "landing.capability.mysql", icon: Database },
-  { titleKey: "landing.capability.prometheus", icon: ChartNoAxesCombined }
-] satisfies Array<{ titleKey: TranslationKey; icon: typeof Gauge }>;
+  { titleKey: "landing.capability.gateway", descKey: "landing.capability.gatewayDesc", icon: Gauge },
+  { titleKey: "landing.capability.protocol", descKey: "landing.capability.protocolDesc", icon: Binary },
+  { titleKey: "landing.capability.messaging", descKey: "landing.capability.messagingDesc", icon: Network },
+  { titleKey: "landing.capability.kafka", descKey: "landing.capability.kafkaDesc", icon: Workflow },
+  { titleKey: "landing.capability.presence", descKey: "landing.capability.presenceDesc", icon: Radio },
+  { titleKey: "landing.capability.mysql", descKey: "landing.capability.mysqlDesc", icon: Database },
+  { titleKey: "landing.capability.prometheus", descKey: "landing.capability.prometheusDesc", icon: ChartNoAxesCombined }
+] satisfies Array<{ titleKey: TranslationKey; descKey: TranslationKey; icon: typeof Gauge }>;
 
 const architecture: Array<TranslationKey | string> = [
   "landing.arch.webClient",
@@ -43,24 +45,44 @@ const architecture: Array<TranslationKey | string> = [
 ];
 
 export function LandingPage() {
-  const { t } = useI18n();
+  const { language, setLanguage, t } = useI18n();
 
   return (
     <div className="min-h-screen overflow-hidden bg-nebula-bg text-nebula-text">
       <NebulaBackground />
       <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
-        <Logo />
+        <Logo compact className="sm:hidden" />
+        <Logo className="hidden sm:flex" />
         <nav className="hidden items-center gap-6 text-sm text-nebula-muted md:flex">
           <a href="#features" className="hover:text-nebula-text">{t("landing.capabilities")}</a>
           <a href="#architecture" className="hover:text-nebula-text">{t("landing.architecture")}</a>
           <Link to="/dashboard" className="hover:text-nebula-text">{t("common.dashboard")}</Link>
         </nav>
-        <Link to="/login">
-          <Button variant="outline" size="sm">
-            {t("landing.launch")}
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex h-9 items-center rounded-lg border border-nebula-border bg-white/[0.04] p-1" aria-label={t("language.title")}>
+            <Languages className="mx-2 hidden h-4 w-4 text-nebula-muted sm:block" />
+            {languageOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setLanguage(option.value)}
+                aria-label={t(option.labelKey)}
+                className={cn(
+                  "h-7 rounded-md px-2 text-xs font-medium transition sm:px-3",
+                  language === option.value ? "bg-cyan-300/[0.14] text-cyan-100" : "text-nebula-muted hover:text-nebula-text"
+                )}
+              >
+                {option.value === "en" ? "EN" : "中"}
+              </button>
+            ))}
+          </div>
+          <Link to="/login">
+            <Button variant="outline" size="sm">
+              {t("landing.launch")}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
       </header>
 
       <main>
@@ -152,7 +174,7 @@ export function LandingPage() {
                     <Icon className="h-5 w-5" />
                   </span>
                   <h3 className="mt-4 text-sm font-semibold text-nebula-text">{t(item.titleKey)}</h3>
-                  <p className="mt-2 text-sm leading-6 text-nebula-muted">{t("landing.cardDescription")}</p>
+                  <p className="mt-2 text-sm leading-6 text-nebula-muted">{t(item.descKey)}</p>
                 </Card>
               );
             })}

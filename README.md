@@ -1,10 +1,12 @@
 # NebulaIM Web
 
+**Language / 语言:** [English](#english) | [中文](#中文)
+
 ## English
 
 NebulaIM Web is the React + TypeScript client for NebulaIM. It connects browser users to the C++ Gateway through the Web Bridge and keeps Gateway traffic on the NebulaIM binary Packet + Protobuf protocol.
 
-### Current Architecture
+### Architecture
 
 ```text
 Browser
@@ -159,7 +161,7 @@ Admin routes require `X-Nebula-Admin-Token`. Do not commit raw AdminService toke
 
 NebulaIM Web 是 NebulaIM 的 React + TypeScript 前端客户端。它通过 Web Bridge 连接浏览器和 C++ Gateway，并保持 Gateway 流量使用 NebulaIM 二进制 Packet + Protobuf 协议。
 
-### 当前架构
+### 架构
 
 ```text
 浏览器
