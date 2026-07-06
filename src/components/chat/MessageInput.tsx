@@ -34,23 +34,30 @@ export function MessageInput({ disabled, onSend, onSendImage }: MessageInputProp
 
   async function send() {
     if (disabled || uploading) return;
+    const content = value.trim();
+
     if (selectedImage) {
       const image = selectedImage;
-      setSelectedImage(null);
       setError("");
       setUploading(true);
       try {
         await onSendImage(image.file);
       } catch {
         setError(t("chat.imageUploadFailed"));
+        setUploading(false);
+        return;
+      }
+
+      try {
+        if (content) await onSend(content);
+        setValue("");
+        setSelectedImage(null);
       } finally {
-        URL.revokeObjectURL(image.previewUrl);
         setUploading(false);
       }
       return;
     }
 
-    const content = value.trim();
     if (!content) return;
     setValue("");
     await onSend(content);
