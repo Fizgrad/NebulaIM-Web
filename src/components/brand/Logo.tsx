@@ -1,4 +1,5 @@
 import { cn } from "../../utils/cn";
+import { useI18n } from "../../i18n";
 
 type LogoProps = {
   compact?: boolean;
@@ -6,6 +7,8 @@ type LogoProps = {
 };
 
 export function Logo({ compact = false, className }: LogoProps) {
+  const { t } = useI18n();
+
   return (
     <div className={cn("flex items-center gap-3", className)}>
       <div className="relative grid h-10 w-10 place-items-center overflow-hidden rounded-lg bg-primary-gradient shadow-glow">
@@ -17,7 +20,7 @@ export function Logo({ compact = false, className }: LogoProps) {
       {!compact ? (
         <div className="leading-tight">
           <div className="text-sm font-semibold tracking-normal text-nebula-text">NebulaIM</div>
-          <div className="text-xs text-nebula-muted">Distributed Messaging</div>
+          <div className="text-xs text-nebula-muted">{t("logo.subtitle")}</div>
         </div>
       ) : null}
     </div>

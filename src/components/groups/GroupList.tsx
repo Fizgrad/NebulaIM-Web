@@ -7,6 +7,7 @@ import { Input } from "../common/Input";
 import { Card } from "../common/Card";
 import { Badge } from "../common/Badge";
 import { useGroupStore } from "../../store/groupStore";
+import { useI18n } from "../../i18n";
 
 type GroupListProps = {
   onMessage: (group: Group) => void;
@@ -14,6 +15,7 @@ type GroupListProps = {
 };
 
 export function GroupList({ onMessage, onMembers }: GroupListProps) {
+  const { t } = useI18n();
   const {
     groups,
     groupSearchResults,
@@ -86,10 +88,10 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
         <section className="space-y-3">
           <Input
-            label="Search Joined Groups"
+            label={t("groups.searchJoined")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="group name or id"
+            placeholder={t("groups.searchPlaceholder")}
             icon={<Search className="h-4 w-4" />}
           />
 
@@ -106,7 +108,7 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
           </div>
           {!isLoading && filtered.length === 0 ? (
             <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-6 text-sm text-nebula-muted">
-              No joined groups match this search. Create a group or join one by ID from the actions panel.
+              {t("groups.empty")}
             </div>
           ) : null}
         </section>
@@ -117,18 +119,18 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
               <span className="grid h-8 w-8 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
                 <Plus className="h-4 w-4" />
               </span>
-              <h3 className="text-sm font-semibold text-nebula-text">Create Group</h3>
+              <h3 className="text-sm font-semibold text-nebula-text">{t("groups.create")}</h3>
             </div>
             <form className="space-y-3" onSubmit={handleCreate}>
               <Input
-                label="Group Name"
+                label={t("groups.groupName")}
                 value={groupName}
                 onChange={(event) => setGroupName(event.target.value)}
-                placeholder="new group name"
+                placeholder={t("groups.groupNamePlaceholder")}
               />
               <Button type="submit" variant="primary" disabled={isLoading} className="h-11 w-full">
                 <UsersRound className="h-4 w-4" />
-                Create Group
+                {t("groups.create")}
               </Button>
             </form>
           </Card>
@@ -138,19 +140,19 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
               <span className="grid h-8 w-8 place-items-center rounded-lg border border-violet-300/20 bg-violet-300/10 text-violet-100">
                 <LogIn className="h-4 w-4" />
               </span>
-              <h3 className="text-sm font-semibold text-nebula-text">Join Group</h3>
+              <h3 className="text-sm font-semibold text-nebula-text">{t("groups.join")}</h3>
             </div>
             <form className="space-y-3" onSubmit={handleSearchJoin}>
               <Input
-                label="Group Name or ID"
+                label={t("groups.groupNameOrId")}
                 value={joinQuery}
                 onChange={(event) => setJoinQuery(event.target.value)}
-                placeholder="search group name or numeric id"
+                placeholder={t("groups.joinPlaceholder")}
                 icon={<Search className="h-4 w-4" />}
               />
               <Button type="submit" variant="outline" disabled={isLoading || isSearching} className="h-11 w-full">
                 <Search className="h-4 w-4" />
-                {isSearching ? "Searching" : "Search Groups"}
+                {isSearching ? t("groups.searching") : t("groups.searchGroups")}
               </Button>
             </form>
             <div className="mt-4 space-y-2">
@@ -162,9 +164,9 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="truncate text-sm font-semibold text-nebula-text">{group.name}</h4>
-                          <Badge tone="slate">ID {group.id}</Badge>
+                          <Badge tone="slate">{t("common.id", { id: group.id })}</Badge>
                         </div>
-                        <p className="mt-1 text-xs text-nebula-muted">{group.memberCount} members</p>
+                        <p className="mt-1 text-xs text-nebula-muted">{t("common.members", { count: group.memberCount })}</p>
                       </div>
                       <Button
                         type="button"
@@ -175,7 +177,7 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
                         className="shrink-0"
                       >
                         {joined ? <CheckCircle2 className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}
-                        {joined ? "Joined" : "Join"}
+                        {joined ? t("groups.joined") : t("groups.joinAction")}
                       </Button>
                     </div>
                   </div>
@@ -183,7 +185,7 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
               })}
               {hasSearchedGroups && !isSearching && groupSearchResults.length === 0 ? (
                 <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-3 text-xs text-nebula-muted">
-                  No groups match this search.
+                  {t("groups.noSearchResults")}
                 </div>
               ) : null}
             </div>

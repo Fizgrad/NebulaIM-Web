@@ -4,6 +4,7 @@ import { Avatar } from "../common/Avatar";
 import { Badge } from "../common/Badge";
 import { formatShortTime } from "../../utils/time";
 import { cn } from "../../utils/cn";
+import { useI18n } from "../../i18n";
 
 type ConversationItemProps = {
   conversation: Conversation;
@@ -12,6 +13,7 @@ type ConversationItemProps = {
 };
 
 export function ConversationItem({ conversation, active, onClick }: ConversationItemProps) {
+  const { locale } = useI18n();
   const isGroup = conversation.type === "group";
 
   return (
@@ -34,7 +36,7 @@ export function ConversationItem({ conversation, active, onClick }: Conversation
       <span className="min-w-0 flex-1">
         <span className="flex items-center justify-between gap-3">
           <span className="truncate text-sm font-medium text-nebula-text">{conversation.title}</span>
-          <span className="shrink-0 text-xs text-nebula-muted">{formatShortTime(conversation.lastMessageAt)}</span>
+          <span className="shrink-0 text-xs text-nebula-muted">{formatShortTime(conversation.lastMessageAt, locale)}</span>
         </span>
         <span className="mt-1 flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5">

@@ -4,8 +4,10 @@ import { Avatar } from "../common/Avatar";
 import { Badge } from "../common/Badge";
 import { useChatStore } from "../../store/chatStore";
 import { useContactStore } from "../../store/contactStore";
+import { useI18n } from "../../i18n";
 
 export function EmptyChatState() {
+  const { t } = useI18n();
   const contacts = useContactStore((state) => state.contacts);
   const isLoading = useContactStore((state) => state.isLoading);
   const error = useContactStore((state) => state.error);
@@ -23,8 +25,8 @@ export function EmptyChatState() {
           <MessageSquareMore className="h-7 w-7" />
         </div>
         <div className="mt-5 text-center">
-          <h2 className="text-lg font-semibold text-nebula-text">Start a conversation</h2>
-          <p className="mt-2 text-sm text-nebula-muted">Select one of your friends to open a direct chat.</p>
+          <h2 className="text-lg font-semibold text-nebula-text">{t("chat.startTitle")}</h2>
+          <p className="mt-2 text-sm text-nebula-muted">{t("chat.startSubtitle")}</p>
         </div>
 
         <div className="mt-6 space-y-3">
@@ -40,7 +42,7 @@ export function EmptyChatState() {
                 <span className="block truncate text-sm font-medium text-nebula-text">{user.nickname}</span>
                 <span className="mt-1 block truncate text-xs text-nebula-muted">@{user.username}</span>
               </span>
-              <Badge tone={user.status === "online" ? "emerald" : "slate"}>{user.status}</Badge>
+              <Badge tone={user.status === "online" ? "emerald" : "slate"}>{user.status === "online" ? t("common.online") : t("common.offline")}</Badge>
             </button>
           ))}
         </div>
@@ -50,14 +52,14 @@ export function EmptyChatState() {
             <div className="mx-auto grid h-10 w-10 place-items-center rounded-lg border border-nebula-border bg-white/[0.04] text-nebula-muted">
               <UserRound className="h-5 w-5" />
             </div>
-            <p className="mt-3 text-sm font-medium text-nebula-text">No friends yet</p>
-            <p className="mt-1 text-sm text-nebula-muted">Add a friend from Contacts before starting a direct chat.</p>
+            <p className="mt-3 text-sm font-medium text-nebula-text">{t("chat.noFriends")}</p>
+            <p className="mt-1 text-sm text-nebula-muted">{t("chat.noFriendsHint")}</p>
           </div>
         ) : null}
 
         {error ? <p className="mt-4 rounded-lg border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm text-red-100">{error}</p> : null}
         {isLoading ? (
-          <div className="mt-6 text-center text-sm text-nebula-muted">Loading friends...</div>
+          <div className="mt-6 text-center text-sm text-nebula-muted">{t("chat.loadingFriends")}</div>
         ) : null}
       </div>
     </div>

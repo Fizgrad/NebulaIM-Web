@@ -14,6 +14,7 @@ import {
 } from "../api/bridgeApi";
 import { useAuthStore } from "./authStore";
 import { useSettingsStore } from "./settingsStore";
+import { translate, type TranslationKey } from "../i18n";
 
 export type FriendRequestView = BridgeFriendRequest & {
   direction: "incoming" | "outgoing";
@@ -37,6 +38,10 @@ type ContactState = {
   clearNotice: () => void;
 };
 
+function tr(key: TranslationKey) {
+  return translate(useSettingsStore.getState().language, key);
+}
+
 function requireNumericId(value: string | undefined, label: string) {
   if (!value || !/^\d+$/.test(value)) {
     throw new Error(`${label} must be numeric.`);
@@ -47,7 +52,7 @@ function requireNumericId(value: string | undefined, label: string) {
 async function resolveFriendUserId(baseUrl: string, identifier: string) {
   const value = identifier.trim();
   if (!value) {
-    throw new Error("Friend username or user_id is required.");
+    throw new Error(tr("store.friendIdentifierRequired"));
   }
   if (/^\d+$/.test(value)) {
     return value;
@@ -142,7 +147,7 @@ export const useContactStore = create<ContactState>((set) => ({
         error: null
       });
     } catch (error) {
-      set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to load friends." });
+      set({ isLoading: false, error: error instanceof Error ? error.message : tr("store.failedLoadFriends") });
     }
   },
   refreshPresence: async () => {
@@ -166,7 +171,7 @@ export const useContactStore = create<ContactState>((set) => ({
     try {
       const toUserId = await resolveFriendUserId(settings.bridgeHttpUrl, identifier);
       if (toUserId === currentUserId) {
-        throw new Error("You cannot send a friend request to yourself.");
+        throw new Error(tr("store.friendRequestSelf"));
       }
       await sendBridgeFriendRequest(settings.bridgeHttpUrl, currentUserId, toUserId, message.trim());
       const [incoming, outgoing] = await Promise.all([
@@ -186,10 +191,10 @@ export const useContactStore = create<ContactState>((set) => ({
         outgoingRequests: outgoingRequests.map((request) => applyRequestPresence(request, presence)),
         isSendingRequest: false,
         error: null,
-        notice: "Friend request sent."
+        notice: tr("store.friendRequestSent")
       });
     } catch (error) {
-      set({ isSendingRequest: false, error: error instanceof Error ? error.message : "Failed to send friend request." });
+      set({ isSendingRequest: false, error: error instanceof Error ? error.message : tr("store.failedSendFriendRequest") });
       throw error;
     }
   },
@@ -220,10 +225,10 @@ export const useContactStore = create<ContactState>((set) => ({
         outgoingRequests: outgoingRequests.map((request) => applyRequestPresence(request, presence)),
         isLoading: false,
         error: null,
-        notice: "Friend request accepted."
+        notice: tr("store.friendRequestAccepted")
       });
     } catch (error) {
-      set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to accept friend request." });
+      set({ isLoading: false, error: error instanceof Error ? error.message : tr("store.failedAcceptFriendRequest") });
       throw error;
     }
   },
@@ -241,10 +246,10 @@ export const useContactStore = create<ContactState>((set) => ({
         incomingRequests: incomingRequests.map((request) => applyRequestPresence(request, presence)),
         isLoading: false,
         error: null,
-        notice: "Friend request rejected."
+        notice: tr("store.friendRequestRejected")
       });
     } catch (error) {
-      set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to reject friend request." });
+      set({ isLoading: false, error: error instanceof Error ? error.message : tr("store.failedRejectFriendRequest") });
       throw error;
     }
   },
@@ -261,7 +266,7 @@ export const useContactStore = create<ContactState>((set) => ({
         contacts: state.contacts.filter((contact) => contact.id !== userId)
       }));
     } catch (error) {
-      set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to delete friend." });
+      set({ isLoading: false, error: error instanceof Error ? error.message : tr("store.failedDeleteFriend") });
       throw error;
     }
   },

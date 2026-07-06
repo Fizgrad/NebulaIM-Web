@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "./Button";
+import { useI18n } from "../../i18n";
 
 type ModalProps = {
   open: boolean;
@@ -10,6 +11,7 @@ type ModalProps = {
 };
 
 export function Modal({ open, title, children, onClose }: ModalProps) {
+  const { t } = useI18n();
   if (!open) return null;
 
   return (
@@ -17,7 +19,7 @@ export function Modal({ open, title, children, onClose }: ModalProps) {
       <div className="w-full max-w-lg rounded-lg border border-nebula-border bg-nebula-panel shadow-panel">
         <div className="flex items-center justify-between border-b border-nebula-border px-5 py-4">
           <h2 className="text-base font-semibold text-nebula-text">{title}</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close modal">
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label={t("common.closeModal")}>
             <X className="h-4 w-4" />
           </Button>
         </div>

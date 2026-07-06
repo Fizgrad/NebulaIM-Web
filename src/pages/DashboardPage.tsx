@@ -21,6 +21,7 @@ import { useSettingsStore } from "../store/settingsStore";
 import { useChatStore } from "../store/chatStore";
 import { useAdminStore } from "../store/adminStore";
 import { formatShortTime } from "../utils/time";
+import { useI18n } from "../i18n";
 
 type DashboardPageProps = {
   embedded?: boolean;
@@ -34,6 +35,7 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
   const [bridgeInfo, setBridgeInfo] = useState<BridgeInfo | null>(null);
   const [bridgeError, setBridgeError] = useState("");
   const settings = useSettingsStore();
+  const { t, locale } = useI18n();
   const gatewayStatus = useChatStore((state) => state.gatewayStatus);
   const adminToken = useAdminStore((state) => state.adminToken);
   const setAdminToken = useAdminStore((state) => state.setAdminToken);
@@ -46,7 +48,7 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
       const trimmedToken = token.trim();
       if (!trimmedToken) {
         setRuntime(null);
-        setRuntimeError("Admin token is required for live backend metrics.");
+        setRuntimeError(t("dashboard.tokenRequired"));
         return;
       }
       setIsRuntimeLoading(true);
@@ -56,12 +58,12 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
         setRuntime(response);
       } catch (error) {
         setRuntime(null);
-        setRuntimeError(error instanceof Error ? error.message : "Failed to load live dashboard metrics.");
+        setRuntimeError(error instanceof Error ? error.message : t("dashboard.loadFailed"));
       } finally {
         setIsRuntimeLoading(false);
       }
     },
-    [adminToken, settings.bridgeHttpUrl]
+    [adminToken, settings.bridgeHttpUrl, t]
   );
 
   useEffect(() => {
@@ -77,12 +79,12 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
         if (!mounted) return;
         setBridgeHealth(null);
         setBridgeInfo(null);
-        setBridgeError(error instanceof Error ? error.message : "Bridge unavailable.");
+        setBridgeError(error instanceof Error ? error.message : t("dashboard.bridgeUnavailable"));
       });
     return () => {
       mounted = false;
     };
-  }, [settings.bridgeHttpUrl]);
+  }, [settings.bridgeHttpUrl, t]);
 
   useEffect(() => {
     setTokenInput(adminToken);
@@ -105,11 +107,11 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
   }
 
   const kafkaLagHint = useMemo(() => {
-    if (!runtime) return "AdminService GetKafkaLagInfo";
+    if (!runtime) return t("dashboard.kafkaLagHint");
     return runtime.overview.kafkaLag.lags.length > 0
-      ? `${runtime.overview.kafkaLag.lags.length} consumer groups`
-      : runtime.overview.kafkaLag.response.message || "No lag entries returned";
-  }, [runtime]);
+      ? t("dashboard.consumerGroups", { count: runtime.overview.kafkaLag.lags.length })
+      : runtime.overview.kafkaLag.response.message || t("dashboard.noLagEntries");
+  }, [runtime, t]);
 
   const dashboardContent = (
     <div className="space-y-5">
@@ -117,8 +119,8 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
             <Card className="p-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-nebula-muted">Bridge Status</p>
-                  <p className="mt-3 text-2xl font-semibold text-nebula-text">{bridgeHealth?.ok ? "Online" : "Offline"}</p>
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-nebula-muted">{t("dashboard.bridgeStatus")}</p>
+                  <p className="mt-3 text-2xl font-semibold text-nebula-text">{bridgeHealth?.ok ? t("common.online") : t("common.offline")}</p>
                   <p className="mt-1 text-xs text-slate-400">{bridgeInfo?.gateway ?? bridgeError ?? settings.bridgeHttpUrl}</p>
                 </div>
                 <span className="grid h-10 w-10 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
@@ -127,10 +129,10 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Badge tone={gatewayStatus.state === "connected" ? "emerald" : "amber"}>
-                  TCP: {gatewayStatus.state}
+                  {t("dashboard.tcp", { state: gatewayStatus.state })}
                 </Badge>
                 <Badge tone="violet">
-                  Heartbeat: {gatewayStatus.lastHeartbeatAt ? formatShortTime(gatewayStatus.lastHeartbeatAt) : "waiting"}
+                  {t("dashboard.heartbeat", { state: gatewayStatus.lastHeartbeatAt ? formatShortTime(gatewayStatus.lastHeartbeatAt, locale) : t("dashboard.waiting") })}
                 </Badge>
               </div>
             </Card>
@@ -138,31 +140,31 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
             {runtime ? (
               <>
                 <MetricCard
-                  label="Gateway Connections"
+                  label={t("dashboard.gatewayConnections")}
                   value={formatNumber(Number(runtime.overview.systemStats.activeConnections))}
-                  hint="AdminService GetSystemStats"
+                  hint={t("dashboard.systemStatsHint")}
                   icon={Server}
                 />
                 <MetricCard
-                  label="Online Users"
+                  label={t("dashboard.onlineUsers")}
                   value={formatNumber(Number(runtime.overview.systemStats.onlineUsers))}
-                  hint="AdminService GetSystemStats"
+                  hint={t("dashboard.systemStatsHint")}
                   icon={Radio}
                 />
                 <MetricCard
-                  label="Outbox Events"
+                  label={t("dashboard.outboxEvents")}
                   value={formatNumber(totalOutbox)}
-                  hint="pending + published + failed + dead"
+                  hint={t("dashboard.outboxHint")}
                   icon={Database}
                 />
                 <MetricCard
-                  label="Outbox Publish Rate"
+                  label={t("dashboard.outboxPublishRate")}
                   value={formatPercent(runtime.outboxPublishRate)}
-                  hint="published / total outbox events"
+                  hint={t("dashboard.publishRateHint")}
                   icon={TrendingUp}
                 />
                 <MetricCard
-                  label="Kafka Lag"
+                  label={t("dashboard.kafkaLag")}
                   value={formatNumber(runtime.totalKafkaLag)}
                   hint={kafkaLagHint}
                   icon={Activity}
@@ -175,22 +177,22 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
                     <Shield className="h-5 w-5" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <h2 className="text-sm font-semibold text-nebula-text">Live Metrics Require AdminService Token</h2>
-                    <p className="mt-1 text-sm text-nebula-muted">Enter an AdminService token to load live system stats.</p>
+                    <h2 className="text-sm font-semibold text-nebula-text">{t("dashboard.adminTokenRequired")}</h2>
+                    <p className="mt-1 text-sm text-nebula-muted">{t("dashboard.adminTokenHint")}</p>
                     <form className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]" onSubmit={handleTokenSubmit}>
                       <Input
-                        label="Admin Token"
+                        label={t("dashboard.adminToken")}
                         type="password"
                         value={tokenInput}
                         onChange={(event) => setTokenInput(event.target.value)}
-                        placeholder="AdminService token"
+                        placeholder={t("dashboard.adminTokenPlaceholder")}
                         autoComplete="off"
                         icon={<KeyRound className="h-4 w-4" />}
                       />
                       <div className="flex items-end">
                         <Button type="submit" variant="primary" disabled={isRuntimeLoading}>
                           {isRuntimeLoading ? <Spinner /> : <Shield className="h-4 w-4" />}
-                          Load Metrics
+                          {t("dashboard.loadMetrics")}
                         </Button>
                       </div>
                     </form>
@@ -209,12 +211,12 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
             <>
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-nebula-border bg-white/[0.04] px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-nebula-text">AdminService Live Snapshot</p>
-                  <p className="mt-1 text-xs text-nebula-muted">Last checked {formatShortTime(runtime.checkedAt)}</p>
+                  <p className="text-sm font-medium text-nebula-text">{t("dashboard.snapshot")}</p>
+                  <p className="mt-1 text-xs text-nebula-muted">{t("dashboard.lastChecked", { time: formatShortTime(runtime.checkedAt, locale) })}</p>
                 </div>
                 <Button variant="secondary" onClick={() => void loadRuntime()} disabled={isRuntimeLoading}>
                   {isRuntimeLoading ? <Spinner /> : <RefreshCw className="h-4 w-4" />}
-                  Refresh
+                  {t("common.refresh")}
                 </Button>
               </div>
 
@@ -227,15 +229,15 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
               <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
                 <Card className="p-4">
                   <div className="mb-5">
-                    <h2 className="text-base font-semibold text-nebula-text">Outbox Status</h2>
-                    <p className="mt-1 text-sm text-nebula-muted">Real counts from AdminService GetOutboxStats</p>
+                    <h2 className="text-base font-semibold text-nebula-text">{t("dashboard.outboxStatus")}</h2>
+                    <p className="mt-1 text-sm text-nebula-muted">{t("dashboard.outboxStatusHint")}</p>
                   </div>
                   <div className="grid gap-3 md:grid-cols-4">
                     {[
-                      ["Pending", runtime.overview.outboxStats.pending, "amber"],
-                      ["Published", runtime.overview.outboxStats.published, "emerald"],
-                      ["Failed", runtime.overview.outboxStats.failed, "red"],
-                      ["Dead", runtime.overview.outboxStats.dead, "slate"]
+                      [t("dashboard.pending"), runtime.overview.outboxStats.pending, "amber"],
+                      [t("dashboard.published"), runtime.overview.outboxStats.published, "emerald"],
+                      [t("dashboard.failed"), runtime.overview.outboxStats.failed, "red"],
+                      [t("dashboard.dead"), runtime.overview.outboxStats.dead, "slate"]
                     ].map(([label, value, tone]) => (
                       <div key={label} className="rounded-lg border border-nebula-border bg-white/[0.04] p-4">
                         <Badge tone={tone as "amber" | "emerald" | "red" | "slate"}>{label}</Badge>
@@ -259,7 +261,7 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
 
   if (embedded) {
     return (
-      <PageContainer title="Dashboard" subtitle="Bridge health, Gateway connectivity and runtime metrics for NebulaIM.">
+      <PageContainer title={t("dashboard.title")} subtitle={t("dashboard.subtitle")}>
         {dashboardContent}
       </PageContainer>
     );
@@ -274,19 +276,19 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
           <Link to="/">
             <Button variant="ghost">
               <ArrowLeft className="h-4 w-4" />
-              Home
+              {t("common.home")}
             </Button>
           </Link>
           <Link to="/app/chat">
-            <Button variant="primary">Open Client</Button>
+            <Button variant="primary">{t("common.openClient")}</Button>
           </Link>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-5 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-semibold text-nebula-text">NebulaIM Dashboard</h1>
-          <p className="mt-2 text-sm text-nebula-muted">Bridge health, Gateway connectivity and runtime metrics for NebulaIM.</p>
+          <h1 className="text-3xl font-semibold text-nebula-text">{t("dashboard.fullTitle")}</h1>
+          <p className="mt-2 text-sm text-nebula-muted">{t("dashboard.subtitle")}</p>
         </div>
         {dashboardContent}
       </main>

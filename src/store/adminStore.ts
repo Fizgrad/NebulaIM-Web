@@ -11,6 +11,7 @@ import {
 } from "../api/adminApi";
 import type { AdminCleanupResult, AdminOverview } from "../types/admin";
 import { useSettingsStore } from "./settingsStore";
+import { translate, type TranslationKey } from "../i18n";
 
 type AdminState = {
   adminToken: string;
@@ -23,6 +24,10 @@ type AdminState = {
   loadOverview: () => Promise<void>;
   runCleanup: (dryRun: boolean) => Promise<void>;
 };
+
+function tr(key: TranslationKey) {
+  return translate(useSettingsStore.getState().language, key);
+}
 
 export const useAdminStore = create<AdminState>()(
   persist(
@@ -37,7 +42,7 @@ export const useAdminStore = create<AdminState>()(
       loadOverview: async () => {
         const adminToken = get().adminToken.trim();
         if (!adminToken) {
-          set({ error: "Admin token is required." });
+          set({ error: tr("store.adminTokenRequired") });
           return;
         }
         const baseUrl = useSettingsStore.getState().bridgeHttpUrl;
@@ -61,14 +66,14 @@ export const useAdminStore = create<AdminState>()(
             isLoading: false,
             overview: null,
             cleanupResult: null,
-            error: error instanceof Error ? error.message : "Failed to load admin overview."
+            error: error instanceof Error ? error.message : tr("store.failedAdminOverview")
           });
         }
       },
       runCleanup: async (dryRun) => {
         const adminToken = get().adminToken.trim();
         if (!adminToken) {
-          set({ error: "Admin token is required." });
+          set({ error: tr("store.adminTokenRequired") });
           return;
         }
         const baseUrl = useSettingsStore.getState().bridgeHttpUrl;
@@ -79,7 +84,7 @@ export const useAdminStore = create<AdminState>()(
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Cleanup request failed."
+            error: error instanceof Error ? error.message : tr("store.cleanupFailed")
           });
         }
       }

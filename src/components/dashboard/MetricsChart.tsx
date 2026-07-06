@@ -1,17 +1,20 @@
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 import type { MetricsPoint } from "../../types/metrics";
 import { Card } from "../common/Card";
+import { useI18n } from "../../i18n";
 
 type MetricsChartProps = {
   data: MetricsPoint[];
 };
 
 export function MetricsChart({ data }: MetricsChartProps) {
+  const { t } = useI18n();
+
   return (
     <Card className="p-4">
       <div className="mb-5">
-        <h2 className="text-base font-semibold text-nebula-text">Runtime Metrics</h2>
-        <p className="mt-1 text-sm text-nebula-muted">Message QPS, P99 latency and online users</p>
+        <h2 className="text-base font-semibold text-nebula-text">{t("metrics.title")}</h2>
+        <p className="mt-1 text-sm text-nebula-muted">{t("metrics.subtitle")}</p>
       </div>
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">

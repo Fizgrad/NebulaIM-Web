@@ -1,6 +1,7 @@
 import { KeyboardEvent, useState } from "react";
 import { SendHorizontal } from "lucide-react";
 import { Button } from "../common/Button";
+import { useI18n } from "../../i18n";
 
 type MessageInputProps = {
   disabled?: boolean;
@@ -8,6 +9,7 @@ type MessageInputProps = {
 };
 
 export function MessageInput({ disabled, onSend }: MessageInputProps) {
+  const { t } = useI18n();
   const [value, setValue] = useState("");
 
   async function send() {
@@ -33,10 +35,10 @@ export function MessageInput({ disabled, onSend }: MessageInputProps) {
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
           rows={1}
-          placeholder="Type a message..."
+          placeholder={t("chat.typeMessage")}
           className="max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-sm text-nebula-text outline-none placeholder:text-slate-500"
         />
-        <Button variant="primary" size="icon" onClick={() => void send()} disabled={disabled || !value.trim()} aria-label="Send message">
+        <Button variant="primary" size="icon" onClick={() => void send()} disabled={disabled || !value.trim()} aria-label={t("chat.sendMessage")}>
           <SendHorizontal className="h-4 w-4" />
         </Button>
       </div>

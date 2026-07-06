@@ -2,6 +2,7 @@ import { Activity, Clock3, Radio, Server } from "lucide-react";
 import type { GatewayStatus } from "../../services/gatewayClient";
 import { cn } from "../../utils/cn";
 import { formatShortTime } from "../../utils/time";
+import { useI18n } from "../../i18n";
 
 type ConnectionStatusProps = {
   status: GatewayStatus;
@@ -9,6 +10,7 @@ type ConnectionStatusProps = {
 };
 
 export function ConnectionStatus({ status, compact = false }: ConnectionStatusProps) {
+  const { t, locale } = useI18n();
   const connected = status.state === "connected";
   const warning = status.state === "reconnecting";
 
@@ -22,18 +24,18 @@ export function ConnectionStatus({ status, compact = false }: ConnectionStatusPr
     >
       <span className="inline-flex items-center gap-1.5">
         <Radio className={cn("h-3.5 w-3.5", connected ? "text-emerald-300" : warning ? "text-amber-300" : "text-red-300")} />
-        <span>Gateway</span>
-        <span>{connected ? "Connected" : status.state === "reconnecting" ? "Reconnecting" : "Disconnected"}</span>
+        <span>{t("chat.gateway")}</span>
+        <span>{connected ? t("chat.gatewayConnected") : status.state === "reconnecting" ? t("chat.gatewayReconnecting") : t("chat.gatewayDisconnected")}</span>
       </span>
       <span className={cn("items-center gap-1.5", compact ? "hidden" : "inline-flex")}>
         <Activity className="h-3.5 w-3.5 text-cyan-200" />
-        <span>{status.heartbeatOk ? "Heartbeat OK" : "Heartbeat waiting"}</span>
+        <span>{status.heartbeatOk ? t("chat.heartbeatOk") : t("chat.heartbeatWaiting")}</span>
       </span>
-      <span className={cn("text-cyan-100", compact && "hidden")}>Latency {status.latency || 18}ms</span>
+      <span className={cn("text-cyan-100", compact && "hidden")}>{t("common.latency", { ms: status.latency || 18 })}</span>
       {status.lastHeartbeatAt ? (
         <span className="inline-flex items-center gap-1.5 text-nebula-muted">
           <Clock3 className="h-3.5 w-3.5" />
-          {formatShortTime(status.lastHeartbeatAt)}
+          {formatShortTime(status.lastHeartbeatAt, locale)}
         </span>
       ) : null}
       {status.gatewayUrl ? (

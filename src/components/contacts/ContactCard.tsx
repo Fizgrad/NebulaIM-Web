@@ -4,6 +4,7 @@ import { Avatar } from "../common/Avatar";
 import { Badge } from "../common/Badge";
 import { Button } from "../common/Button";
 import { Card } from "../common/Card";
+import { useI18n } from "../../i18n";
 
 type ContactCardProps = {
   user: User;
@@ -12,6 +13,7 @@ type ContactCardProps = {
 };
 
 export function ContactCard({ user, onMessage, onDelete }: ContactCardProps) {
+  const { t } = useI18n();
   const online = user.status === "online";
 
   return (
@@ -21,16 +23,18 @@ export function ContactCard({ user, onMessage, onDelete }: ContactCardProps) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate text-sm font-semibold text-nebula-text">{user.nickname}</h3>
-            <Badge tone={online ? "emerald" : user.status === "away" ? "amber" : "slate"}>{user.status}</Badge>
+            <Badge tone={online ? "emerald" : user.status === "away" ? "amber" : "slate"}>
+              {user.status === "online" ? t("common.online") : user.status === "away" ? t("common.away") : t("common.offline")}
+            </Badge>
           </div>
           <p className="mt-1 truncate text-xs text-nebula-muted">@{user.username}</p>
           <p className="mt-2 truncate text-xs text-slate-400">{user.gateway}</p>
         </div>
         <div className="flex shrink-0 gap-2">
-          <Button variant="secondary" size="icon" onClick={() => onMessage(user)} aria-label={`Message ${user.nickname}`}>
+          <Button variant="secondary" size="icon" onClick={() => onMessage(user)} aria-label={t("contacts.message", { name: user.nickname })}>
             <MessageSquare className="h-4 w-4" />
           </Button>
-          <Button variant="danger" size="icon" onClick={() => onDelete(user.id)} aria-label={`Delete ${user.nickname}`}>
+          <Button variant="danger" size="icon" onClick={() => onDelete(user.id)} aria-label={t("contacts.delete", { name: user.nickname })}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>

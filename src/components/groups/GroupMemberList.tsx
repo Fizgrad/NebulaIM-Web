@@ -1,12 +1,15 @@
 import type { User } from "../../types/user";
 import { Avatar } from "../common/Avatar";
 import { Badge } from "../common/Badge";
+import { useI18n } from "../../i18n";
 
 type GroupMemberListProps = {
   members: User[];
 };
 
 export function GroupMemberList({ members }: GroupMemberListProps) {
+  const { t } = useI18n();
+
   return (
     <div className="space-y-3">
       {members.map((member) => (
@@ -17,7 +20,7 @@ export function GroupMemberList({ members }: GroupMemberListProps) {
             <p className="truncate text-xs text-nebula-muted">@{member.username}</p>
           </div>
           <Badge tone={member.status === "online" ? "emerald" : member.status === "away" ? "amber" : "slate"}>
-            {member.status}
+            {member.status === "online" ? t("common.online") : member.status === "away" ? t("common.away") : t("common.offline")}
           </Badge>
         </div>
       ))}

@@ -6,19 +6,21 @@ import { Button } from "../common/Button";
 import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
 import { cn } from "../../utils/cn";
+import { useI18n, type TranslationKey } from "../../i18n";
 
 const navItems = [
-  { label: "Chat", path: "/app/chat", icon: MessageSquare },
-  { label: "Contacts", path: "/app/contacts", icon: UserRound },
-  { label: "Groups", path: "/app/groups", icon: UsersRound },
-  { label: "Profile", path: "/app/profile", icon: Network },
-  { label: "Settings", path: "/app/settings", icon: Settings }
-];
+  { labelKey: "nav.chat", path: "/app/chat", icon: MessageSquare },
+  { labelKey: "nav.contacts", path: "/app/contacts", icon: UserRound },
+  { labelKey: "nav.groups", path: "/app/groups", icon: UsersRound },
+  { labelKey: "nav.profile", path: "/app/profile", icon: Network },
+  { labelKey: "nav.settings", path: "/app/settings", icon: Settings }
+] satisfies Array<{ labelKey: TranslationKey; path: string; icon: typeof MessageSquare }>;
 
 export function Sidebar() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const gatewayConnected = useChatStore((state) => state.gatewayStatus.state === "connected");
+  const { t } = useI18n();
 
   return (
     <>
@@ -27,14 +29,14 @@ export function Sidebar() {
         <Logo className="hidden lg:flex" />
 
         <div className="mt-7 flex items-center justify-center gap-3 rounded-lg border border-nebula-border bg-white/[0.04] p-2 lg:justify-start">
-          <Avatar name={user?.nickname ?? "Operator"} color={user?.avatarColor} online={gatewayConnected} />
+          <Avatar name={user?.nickname ?? t("sidebar.operator")} color={user?.avatarColor} online={gatewayConnected} />
           <div className="hidden min-w-0 lg:block">
-            <p className="truncate text-sm font-medium text-nebula-text">{user?.nickname ?? "Nebula Operator"}</p>
-            <p className="truncate text-xs text-nebula-muted">{gatewayConnected ? "Gateway connected" : "Gateway disconnected"}</p>
+            <p className="truncate text-sm font-medium text-nebula-text">{user?.nickname ?? t("sidebar.nebulaOperator")}</p>
+            <p className="truncate text-xs text-nebula-muted">{gatewayConnected ? t("sidebar.gatewayConnected") : t("sidebar.gatewayDisconnected")}</p>
           </div>
         </div>
 
-        <nav className="mt-6 flex flex-1 flex-col gap-1" aria-label="Primary navigation">
+        <nav className="mt-6 flex flex-1 flex-col gap-1" aria-label={t("sidebar.primaryNavigation")}>
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -49,7 +51,7 @@ export function Sidebar() {
                 }
               >
                 <Icon className="h-4 w-4" />
-                <span className="hidden lg:inline">{item.label}</span>
+                <span className="hidden lg:inline">{t(item.labelKey)}</span>
               </NavLink>
             );
           })}
@@ -64,13 +66,13 @@ export function Sidebar() {
           }}
         >
           <LogOut className="h-4 w-4" />
-          <span className="hidden lg:inline">Logout</span>
+          <span className="hidden lg:inline">{t("common.logout")}</span>
         </Button>
       </aside>
 
       <nav
         className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-nebula-border bg-nebula-panel/95 px-2 pt-2 shadow-panel backdrop-blur-xl md:hidden"
-        aria-label="Mobile navigation"
+        aria-label={t("sidebar.mobileNavigation")}
       >
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -86,7 +88,7 @@ export function Sidebar() {
               }
             >
               <Icon className="h-4 w-4 shrink-0" />
-              <span className="max-w-full truncate">{item.label}</span>
+              <span className="max-w-full truncate">{t(item.labelKey)}</span>
             </NavLink>
           );
         })}

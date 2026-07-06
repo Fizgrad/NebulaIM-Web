@@ -9,6 +9,7 @@ import { Badge } from "../common/Badge";
 import { Button } from "../common/Button";
 import { useChatStore } from "../../store/chatStore";
 import { cn } from "../../utils/cn";
+import { useI18n } from "../../i18n";
 
 type ChatWindowProps = {
   className?: string;
@@ -23,6 +24,7 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
   const retryMessage = useChatStore((state) => state.retryMessage);
   const gatewayStatus = useChatStore((state) => state.gatewayStatus);
   const markConversationRead = useChatStore((state) => state.markConversationRead);
+  const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const conversation = useMemo(
@@ -62,7 +64,7 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
               size="icon"
               className="h-9 w-9 shrink-0 md:hidden"
               onClick={onBack}
-              aria-label="Back to conversations"
+              aria-label={t("chat.backToConversations")}
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -78,11 +80,11 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
             <h2 className="truncate text-base font-semibold text-nebula-text">{conversation.title}</h2>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-nebula-muted">
               <Badge tone={conversation.type === "group" ? "violet" : conversation.online ? "emerald" : "slate"}>
-                {conversation.type === "group" ? "Group Chat" : conversation.online ? "Online" : "Offline"}
+                {conversation.type === "group" ? t("chat.groupChat") : conversation.online ? t("common.online") : t("common.offline")}
               </Badge>
               <span className="inline-flex items-center gap-1">
                 <ShieldCheck className="h-3.5 w-3.5 text-cyan-200" />
-                ACK enabled
+                {t("chat.ackEnabled")}
               </span>
             </div>
           </div>
@@ -97,7 +99,7 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
 
       <div ref={scrollRef} className="chat-scroll-area min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:space-y-5 sm:px-5 sm:py-6">
         <div className="mx-auto w-fit rounded-full border border-nebula-border bg-white/[0.04] px-3 py-1 text-xs text-nebula-muted">
-          Today
+          {t("common.today")}
         </div>
         {messages.map((message) => (
           <MessageBubble

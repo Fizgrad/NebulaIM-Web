@@ -13,6 +13,7 @@ import {
 } from "../api/bridgeApi";
 import { useAuthStore } from "./authStore";
 import { useSettingsStore } from "./settingsStore";
+import { translate, type TranslationKey } from "../i18n";
 
 type GroupState = {
   groups: Group[];
@@ -29,9 +30,13 @@ type GroupState = {
   leaveGroup: (groupId: string) => Promise<void>;
 };
 
-function requireNumericId(value: string | undefined, label: string) {
+function tr(key: TranslationKey) {
+  return translate(useSettingsStore.getState().language, key);
+}
+
+function requireNumericId(value: string | undefined, message: string) {
   if (!value || !/^\d+$/.test(value)) {
-    throw new Error(`${label} must be numeric.`);
+    throw new Error(message);
   }
   return value;
 }
@@ -67,11 +72,11 @@ export const useGroupStore = create<GroupState>((set) => ({
     const settings = useSettingsStore.getState();
     set({ isLoading: true, error: null });
     try {
-      const userId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
+      const userId = requireNumericId(useAuthStore.getState().user?.id, tr("store.currentUserNumeric"));
       const groups = await listBridgeGroups(settings.bridgeHttpUrl, userId);
       set({ groups, isLoading: false, error: null });
     } catch (error) {
-      set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to load groups." });
+      set({ isLoading: false, error: error instanceof Error ? error.message : tr("store.failedLoadGroups") });
       throw error;
     }
   },
@@ -79,7 +84,7 @@ export const useGroupStore = create<GroupState>((set) => ({
     const settings = useSettingsStore.getState();
     set({ isLoading: true, error: null });
     try {
-      const numericGroupId = requireNumericId(groupId, "Group ID");
+      const numericGroupId = requireNumericId(groupId, tr("store.groupIdNumeric"));
       const members = await listBridgeGroupMembers(settings.bridgeHttpUrl, numericGroupId);
       const presence = await loadPresence(settings.bridgeHttpUrl, members.map((member) => member.id));
       const membersWithPresence = members.map((member) => applyPresence(member, presence));
@@ -92,7 +97,7 @@ export const useGroupStore = create<GroupState>((set) => ({
       }));
       return membersWithPresence;
     } catch (error) {
-      set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to load group members." });
+      set({ isLoading: false, error: error instanceof Error ? error.message : tr("store.failedLoadGroupMembers") });
       throw error;
     }
   },
@@ -110,7 +115,7 @@ export const useGroupStore = create<GroupState>((set) => ({
       set({ groupSearchResults: groups, isSearching: false, error: null });
       return groups;
     } catch (error) {
-      set({ isSearching: false, error: error instanceof Error ? error.message : "Failed to search groups." });
+      set({ isSearching: false, error: error instanceof Error ? error.message : tr("store.failedSearchGroups") });
       throw error;
     }
   },
@@ -122,7 +127,7 @@ export const useGroupStore = create<GroupState>((set) => ({
       const group = await createRealGroup(settings.bridgeHttpUrl, name);
       set((state) => ({ groups: [group, ...state.groups], isLoading: false, error: null }));
     } catch (error) {
-      set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to create group." });
+      set({ isLoading: false, error: error instanceof Error ? error.message : tr("store.failedCreateGroup") });
       throw error;
     }
   },
@@ -139,7 +144,7 @@ export const useGroupStore = create<GroupState>((set) => ({
         error: null
       }));
     } catch (error) {
-      set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to join group." });
+      set({ isLoading: false, error: error instanceof Error ? error.message : tr("store.failedJoinGroup") });
       throw error;
     }
   },
@@ -147,8 +152,8 @@ export const useGroupStore = create<GroupState>((set) => ({
     const settings = useSettingsStore.getState();
     set({ isLoading: true, error: null });
     try {
-      const userId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
-      const numericGroupId = requireNumericId(groupId, "Group ID");
+      const userId = requireNumericId(useAuthStore.getState().user?.id, tr("store.currentUserNumeric"));
+      const numericGroupId = requireNumericId(groupId, tr("store.groupIdNumeric"));
       await leaveBridgeGroup(settings.bridgeHttpUrl, userId, numericGroupId);
       set((state) => ({
         groups: state.groups.filter((item) => item.id !== groupId),
@@ -156,7 +161,7 @@ export const useGroupStore = create<GroupState>((set) => ({
         error: null
       }));
     } catch (error) {
-      set({ isLoading: false, error: error instanceof Error ? error.message : "Failed to leave group." });
+      set({ isLoading: false, error: error instanceof Error ? error.message : tr("store.failedLeaveGroup") });
       throw error;
     }
   }
@@ -164,7 +169,7 @@ export const useGroupStore = create<GroupState>((set) => ({
 
 async function createRealGroup(baseUrl: string, name: string): Promise<Group> {
   const currentUser = useAuthStore.getState().user;
-  const ownerId = requireNumericId(currentUser?.id, "Current user_id");
+  const ownerId = requireNumericId(currentUser?.id, tr("store.currentUserNumeric"));
   const response = await createBridgeGroup(baseUrl, ownerId, name);
   return {
     id: response.groupId,
@@ -177,8 +182,8 @@ async function createRealGroup(baseUrl: string, name: string): Promise<Group> {
 }
 
 async function joinRealGroup(baseUrl: string, groupId: string): Promise<Group> {
-  const userId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
-  const numericGroupId = requireNumericId(groupId.trim(), "Group ID");
+  const userId = requireNumericId(useAuthStore.getState().user?.id, tr("store.currentUserNumeric"));
+  const numericGroupId = requireNumericId(groupId.trim(), tr("store.groupIdNumeric"));
   await joinBridgeGroup(baseUrl, userId, numericGroupId);
   const [members, groupInfo] = await Promise.all([
     listBridgeGroupMembers(baseUrl, numericGroupId),

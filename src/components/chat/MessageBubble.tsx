@@ -4,6 +4,7 @@ import { Avatar } from "../common/Avatar";
 import { Button } from "../common/Button";
 import { formatShortTime } from "../../utils/time";
 import { cn } from "../../utils/cn";
+import { useI18n, type TranslationKey } from "../../i18n";
 
 type MessageBubbleProps = {
   message: Message;
@@ -20,6 +21,7 @@ const statusIcon: Record<MessageStatus, JSX.Element> = {
 };
 
 export function MessageBubble({ message, showSenderName = false, onRetry }: MessageBubbleProps) {
+  const { t, locale } = useI18n();
   const senderName = message.senderName ?? `User ${message.fromUserId}`;
 
   return (
@@ -44,14 +46,14 @@ export function MessageBubble({ message, showSenderName = false, onRetry }: Mess
               message.isMine ? "text-white/85" : "text-nebula-muted"
             )}
           >
-            <span>{formatShortTime(message.createdAt)}</span>
+            <span>{formatShortTime(message.createdAt, locale)}</span>
             {message.isMine ? (
               <>
                 {statusIcon[message.status]}
-                <span>{message.status}</span>
+                <span>{t(`chat.status.${message.status}` as TranslationKey)}</span>
                 {message.status === "failed" && onRetry ? (
                   <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]" onClick={() => onRetry(message.id)}>
-                    Retry
+                    {t("common.retry")}
                   </Button>
                 ) : null}
               </>

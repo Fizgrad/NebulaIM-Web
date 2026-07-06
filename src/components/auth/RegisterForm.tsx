@@ -5,10 +5,12 @@ import { Button } from "../common/Button";
 import { Input } from "../common/Input";
 import { Spinner } from "../common/Spinner";
 import { useAuthStore } from "../../store/authStore";
+import { useI18n } from "../../i18n";
 
 export function RegisterForm() {
   const navigate = useNavigate();
   const { register, isLoading, error, clearError } = useAuthStore();
+  const { t } = useI18n();
   const [username, setUsername] = useState("");
   const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
@@ -23,11 +25,11 @@ export function RegisterForm() {
     event.preventDefault();
     setLocalError("");
     if (password !== confirmPassword) {
-      setLocalError("Passwords do not match.");
+      setLocalError(t("auth.passwordMismatch"));
       return;
     }
     if (password.length < 6) {
-      setLocalError("Password must be at least 6 characters.");
+      setLocalError(t("auth.passwordTooShort"));
       return;
     }
     try {
@@ -41,7 +43,7 @@ export function RegisterForm() {
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
       <Input
-        label="Username"
+        label={t("auth.username")}
         value={username}
         onChange={(event) => setUsername(event.target.value)}
         placeholder="nebula"
@@ -49,14 +51,14 @@ export function RegisterForm() {
         autoComplete="username"
       />
       <Input
-        label="Nickname"
+        label={t("auth.nickname")}
         value={nickname}
         onChange={(event) => setNickname(event.target.value)}
         placeholder="Nebula Operator"
         icon={<Sparkles className="h-4 w-4" />}
       />
       <Input
-        label="Password"
+        label={t("auth.password")}
         type="password"
         value={password}
         onChange={(event) => setPassword(event.target.value)}
@@ -64,7 +66,7 @@ export function RegisterForm() {
         autoComplete="new-password"
       />
       <Input
-        label="Confirm Password"
+        label={t("auth.confirmPassword")}
         type="password"
         value={confirmPassword}
         onChange={(event) => setConfirmPassword(event.target.value)}
@@ -78,12 +80,12 @@ export function RegisterForm() {
       ) : null}
       <Button type="submit" variant="primary" className="w-full" disabled={isLoading}>
         {isLoading ? <Spinner /> : null}
-        Register
+        {t("auth.register")}
       </Button>
       <p className="text-center text-sm text-nebula-muted">
-        Already have an account?{" "}
+        {t("auth.haveAccount")}{" "}
         <Link to="/login" className="font-medium text-cyan-200 hover:text-cyan-100">
-          Sign in
+          {t("auth.signIn")}
         </Link>
       </p>
     </form>

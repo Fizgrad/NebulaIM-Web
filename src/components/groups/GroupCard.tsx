@@ -4,6 +4,7 @@ import { Badge } from "../common/Badge";
 import { Button } from "../common/Button";
 import { Card } from "../common/Card";
 import { formatRelativeTime } from "../../utils/time";
+import { useI18n } from "../../i18n";
 
 type GroupCardProps = {
   group: Group;
@@ -13,6 +14,8 @@ type GroupCardProps = {
 };
 
 export function GroupCard({ group, onMessage, onMembers, onLeave }: GroupCardProps) {
+  const { t, language } = useI18n();
+
   return (
     <Card className="p-4">
       <div className="flex items-start gap-4">
@@ -22,22 +25,22 @@ export function GroupCard({ group, onMessage, onMembers, onLeave }: GroupCardPro
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate text-sm font-semibold text-nebula-text">{group.name}</h3>
-            <Badge tone="slate">ID {group.id}</Badge>
-            <Badge tone="violet">{group.memberCount} members</Badge>
+            <Badge tone="slate">{t("common.id", { id: group.id })}</Badge>
+            <Badge tone="violet">{t("common.members", { count: group.memberCount })}</Badge>
           </div>
-          <p className="mt-1 text-xs text-nebula-muted">Created {formatRelativeTime(group.createdAt)}</p>
+          <p className="mt-1 text-xs text-nebula-muted">{t("common.createdRelative", { time: formatRelativeTime(group.createdAt, language) })}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="primary" size="sm" onClick={() => onMessage(group)}>
               <MessageSquare className="h-4 w-4" />
-              Chat
+              {t("groups.chat")}
             </Button>
             <Button variant="secondary" size="sm" onClick={() => onMembers(group)}>
               <UsersRound className="h-4 w-4" />
-              Members
+              {t("groups.members")}
             </Button>
             <Button variant="danger" size="sm" onClick={() => onLeave(group.id)}>
               <LogOut className="h-4 w-4" />
-              Leave
+              {t("groups.leave")}
             </Button>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { BarChart3, CheckCircle2, LogOut, Monitor, Moon, RotateCcw, ShieldCheck, Sun, Trash2, Wifi } from "lucide-react";
+import { BarChart3, CheckCircle2, Languages, LogOut, Monitor, Moon, RotateCcw, ShieldCheck, Sun, Trash2, Wifi } from "lucide-react";
 import { useState } from "react";
 import { testBridgeConnection } from "../api/bridgeApi";
 import { Button } from "../components/common/Button";
@@ -11,8 +11,13 @@ import { useAuthStore } from "../store/authStore";
 import { useChatStore } from "../store/chatStore";
 import { useSettingsStore, type ThemeMode } from "../store/settingsStore";
 import { cn } from "../utils/cn";
+import { languageOptions, useI18n, type TranslationKey } from "../i18n";
 
-const themes: ThemeMode[] = ["dark", "light", "system"];
+const themes: Array<{ value: ThemeMode; labelKey: TranslationKey }> = [
+  { value: "dark", labelKey: "theme.dark" },
+  { value: "light", labelKey: "theme.light" },
+  { value: "system", labelKey: "theme.system" }
+];
 const themeIcons = {
   dark: Moon,
   light: Sun,
@@ -24,6 +29,7 @@ export function SettingsPage() {
   const logout = useAuthStore((state) => state.logout);
   const clearLocalChat = useChatStore((state) => state.clearLocalChat);
   const settings = useSettingsStore();
+  const { t } = useI18n();
   const [testState, setTestState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [testMessage, setTestMessage] = useState("");
 
@@ -46,30 +52,50 @@ export function SettingsPage() {
       setTestMessage(`${result.info.name} -> ${result.info.gateway}`);
     } catch (error) {
       setTestState("error");
-      setTestMessage(error instanceof Error ? error.message : "Bridge connection failed.");
+      setTestMessage(error instanceof Error ? error.message : t("settings.bridgeFailed"));
     }
   }
 
   return (
-    <PageContainer title="Settings" subtitle="Gateway and service endpoint controls for the NebulaIM C++ backend.">
+    <PageContainer title={t("settings.title")} subtitle={t("settings.subtitle")}>
       <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
         <Card className="space-y-6 p-5">
           <section>
-            <h2 className="text-base font-semibold text-nebula-text">Theme</h2>
+            <h2 className="text-base font-semibold text-nebula-text">{t("language.title")}</h2>
+            <p className="mt-1 text-sm text-nebula-muted">{t("language.subtitle")}</p>
+            <div className="mt-3 inline-flex rounded-lg border border-nebula-border bg-white/[0.04] p-1">
+              {languageOptions.map((language) => (
+                <button
+                  key={language.value}
+                  onClick={() => settings.setLanguage(language.value)}
+                  className={cn(
+                    "inline-flex h-9 items-center gap-2 rounded-md px-4 text-sm transition",
+                    settings.language === language.value ? "bg-cyan-300/[0.14] text-cyan-100" : "text-nebula-muted hover:text-nebula-text"
+                  )}
+                >
+                  <Languages className="h-4 w-4" />
+                  {t(language.labelKey)}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-base font-semibold text-nebula-text">{t("theme.title")}</h2>
             <div className="mt-3 inline-flex rounded-lg border border-nebula-border bg-white/[0.04] p-1">
               {themes.map((theme) => {
-                const Icon = themeIcons[theme];
+                const Icon = themeIcons[theme.value];
                 return (
                   <button
-                    key={theme}
-                    onClick={() => settings.setTheme(theme)}
+                    key={theme.value}
+                    onClick={() => settings.setTheme(theme.value)}
                     className={cn(
-                      "inline-flex h-9 items-center gap-2 rounded-md px-4 text-sm capitalize transition",
-                      settings.theme === theme ? "bg-cyan-300/[0.14] text-cyan-100" : "text-nebula-muted hover:text-nebula-text"
+                      "inline-flex h-9 items-center gap-2 rounded-md px-4 text-sm transition",
+                      settings.theme === theme.value ? "bg-cyan-300/[0.14] text-cyan-100" : "text-nebula-muted hover:text-nebula-text"
                     )}
                   >
                     <Icon className="h-4 w-4" />
-                    {theme}
+                    {t(theme.labelKey)}
                   </button>
                 );
               })}
@@ -79,35 +105,35 @@ export function SettingsPage() {
           <section className="grid gap-4 md:grid-cols-2">
             <label className="flex items-center justify-between gap-3 rounded-lg border border-nebula-border bg-white/[0.04] p-4">
               <span>
-                <span className="block text-sm font-medium text-nebula-text">Backend Mode</span>
-                <span className="mt-1 block text-xs text-nebula-muted">C++ Gateway and backend services are active.</span>
+                <span className="block text-sm font-medium text-nebula-text">{t("settings.backendMode")}</span>
+                <span className="mt-1 block text-xs text-nebula-muted">{t("settings.backendModeHint")}</span>
               </span>
               <span className="rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-xs font-medium text-cyan-100">
-                Real
+                {t("common.real")}
               </span>
             </label>
             <div className="rounded-lg border border-nebula-border bg-white/[0.04] p-4">
-              <span className="block text-sm font-medium text-nebula-text">Gateway Transport</span>
-              <span className="mt-1 block text-xs text-nebula-muted">WebSocket binary Packet + Protobuf.</span>
+              <span className="block text-sm font-medium text-nebula-text">{t("settings.gatewayTransport")}</span>
+              <span className="mt-1 block text-xs text-nebula-muted">{t("settings.gatewayTransportHint")}</span>
               <span className="mt-3 inline-flex rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1 text-xs font-medium text-emerald-100">
-                Direct Gateway
+                {t("settings.directGateway")}
               </span>
             </div>
           </section>
 
           <section className="grid gap-4 md:grid-cols-2">
-            <Input label="Gateway TCP Address" value={settings.gatewayUrl} onChange={(event) => settings.setGatewayUrl(event.target.value)} />
+            <Input label={t("settings.gatewayTcpAddress")} value={settings.gatewayUrl} onChange={(event) => settings.setGatewayUrl(event.target.value)} />
             <Input
-              label="Direct Gateway WebSocket URL"
+              label={t("settings.directGatewayWsUrl")}
               value={settings.directGatewayWsUrl}
               onChange={(event) => settings.setDirectGatewayWsUrl(event.target.value)}
             />
           </section>
 
           <section className="grid gap-4 md:grid-cols-2">
-            <Input label="Bridge HTTP URL" value={settings.bridgeHttpUrl} onChange={(event) => settings.setBridgeHttpUrl(event.target.value)} />
+            <Input label={t("settings.bridgeHttpUrl")} value={settings.bridgeHttpUrl} onChange={(event) => settings.setBridgeHttpUrl(event.target.value)} />
             <Input
-              label="Heartbeat Interval"
+              label={t("settings.heartbeatInterval")}
               type="number"
               min={1000}
               step={1000}
@@ -116,8 +142,8 @@ export function SettingsPage() {
             />
             <label className="flex items-center justify-between gap-3 rounded-lg border border-nebula-border bg-white/[0.04] p-4">
               <span>
-                <span className="block text-sm font-medium text-nebula-text">Auto Reconnect</span>
-                <span className="mt-1 block text-xs text-nebula-muted">Reconnect Gateway WebSocket after disconnect.</span>
+                <span className="block text-sm font-medium text-nebula-text">{t("settings.autoReconnect")}</span>
+                <span className="mt-1 block text-xs text-nebula-muted">{t("settings.autoReconnectHint")}</span>
               </span>
               <input type="checkbox" checked={settings.autoReconnect} onChange={(event) => settings.setAutoReconnect(event.target.checked)} />
             </label>
@@ -126,22 +152,22 @@ export function SettingsPage() {
 
         <div className="space-y-4">
           <Card className="space-y-3 p-5">
-            <h2 className="text-base font-semibold text-nebula-text">System Tools</h2>
+            <h2 className="text-base font-semibold text-nebula-text">{t("settings.systemTools")}</h2>
             <Button variant="secondary" className="w-full justify-start" onClick={() => navigate("/dashboard")}>
               <BarChart3 className="h-4 w-4" />
-              Dashboard
+              {t("common.dashboard")}
             </Button>
             <Button variant="outline" className="w-full justify-start" onClick={() => navigate("/admin")}>
               <ShieldCheck className="h-4 w-4" />
-              Admin Console
+              {t("common.adminConsole")}
             </Button>
           </Card>
 
           <Card className="space-y-3 p-5">
-            <h2 className="text-base font-semibold text-nebula-text">Local Actions</h2>
+            <h2 className="text-base font-semibold text-nebula-text">{t("settings.localActions")}</h2>
             <Button variant="primary" className="w-full justify-start" onClick={() => void handleTestConnection()} disabled={testState === "loading"}>
               {testState === "loading" ? <Spinner /> : testState === "success" ? <CheckCircle2 className="h-4 w-4" /> : <Wifi className="h-4 w-4" />}
-              Test Services
+              {t("settings.testServices")}
             </Button>
             {testMessage ? (
               <div
@@ -157,15 +183,15 @@ export function SettingsPage() {
             ) : null}
             <Button variant="secondary" className="w-full justify-start" onClick={settings.resetSettings}>
               <RotateCcw className="h-4 w-4" />
-              Reset settings
+              {t("settings.reset")}
             </Button>
             <Button variant="danger" className="w-full justify-start" onClick={clearLocalData}>
               <Trash2 className="h-4 w-4" />
-              Clear local data
+              {t("settings.clearLocalData")}
             </Button>
             <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
               <LogOut className="h-4 w-4" />
-              Logout
+              {t("common.logout")}
             </Button>
           </Card>
         </div>

@@ -1,12 +1,14 @@
 import type { ServiceHealth } from "../../types/metrics";
 import { Badge } from "../common/Badge";
 import { Card } from "../common/Card";
+import { useI18n } from "../../i18n";
 
 type ServiceHealthCardProps = {
   service: ServiceHealth;
 };
 
 export function ServiceHealthCard({ service }: ServiceHealthCardProps) {
+  const { t } = useI18n();
   const tone = service.status === "healthy" ? "emerald" : service.status === "degraded" ? "amber" : "red";
 
   return (
@@ -25,7 +27,7 @@ export function ServiceHealthCard({ service }: ServiceHealthCardProps) {
         />
       </div>
       <p className="mt-2 text-xs text-slate-400">
-        {service.latency === undefined ? "Live dependency status from AdminService" : `${service.latency}ms service latency`}
+        {service.latency === undefined ? t("service.liveDependency") : t("service.latency", { ms: service.latency })}
       </p>
     </Card>
   );

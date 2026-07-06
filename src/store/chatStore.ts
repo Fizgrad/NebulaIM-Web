@@ -22,11 +22,16 @@ import {
   sendBridgeGroupMessage,
   sendBridgeSingleMessage
 } from "../api/bridgeApi";
+import { translate, type TranslationKey } from "../i18n";
 
 type MessagesByConversationId = Record<string, Message[]>;
 
 const resolvedUsers = new Map<string, User>();
 const resolvedGroups = new Map<string, Group>();
+
+function tr(key: TranslationKey) {
+  return translate(useSettingsStore.getState().language, key);
+}
 
 type ChatState = {
   conversations: Conversation[];
@@ -187,7 +192,7 @@ function mapBackendConversation(item: BackendConversationInfo, friendById: Map<s
     title: isGroup ? groupName ?? groupConversationTitle(groupId, item.conversationId) : friend?.nickname ?? `User ${peerUserId ?? item.conversationId}`,
     avatar: friend?.avatar,
     online: isGroup ? undefined : friend ? friend.status === "online" : false,
-    lastMessage: item.lastMessagePreview || "No messages yet",
+    lastMessage: item.lastMessagePreview || tr("store.noMessagesYet"),
     lastMessageAt: Number(item.lastMessageAt || item.updatedAt || Date.now()),
     unreadCount: item.unreadCount,
     pinned: item.pinned,
@@ -218,7 +223,7 @@ function mapBridgeMessage(item: BridgeMessageInfo, conversationId: string, curre
     groupId,
     senderName: sender?.nickname,
     senderAvatar: sender?.avatar,
-    content: item.recalled ? "This message was recalled." : item.content,
+    content: item.recalled ? tr("store.messageRecalled") : item.content,
     contentType: "text",
     status: messageStatusFromBackend(item.status, isMine),
     createdAt: Number(item.createdAt || Date.now()),
@@ -251,12 +256,12 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
   const sequenceId = Date.now() % 1000000;
 
   if (!isNumericId(userId)) {
-    throw new Error("Current user_id must be numeric.");
+    throw new Error(tr("store.currentUserNumeric"));
   }
 
   if (conversation.type === "group" && conversation.groupId) {
     if (!isNumericId(conversation.groupId)) {
-      throw new Error("Group ID must be numeric.");
+      throw new Error(tr("store.groupIdNumeric"));
     }
     const result = await sendBridgeGroupMessage(settings.bridgeHttpUrl, userId, conversation.groupId, message.content, sequenceId);
     updateStatus("sent");
@@ -264,7 +269,7 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
     return result;
   } else {
     if (!isNumericId(conversation.targetUserId)) {
-      throw new Error("Recipient user_id must be numeric.");
+      throw new Error(tr("store.recipientNumeric"));
     }
     const result = await sendBridgeSingleMessage(settings.bridgeHttpUrl, userId, conversation.targetUserId, message.content, sequenceId);
     updateStatus("sent");
@@ -627,7 +632,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       type: "single",
       title: user.nickname,
       online: user.status === "online",
-      lastMessage: "New conversation",
+      lastMessage: tr("store.newConversation"),
       lastMessageAt: Date.now(),
       unreadCount: 0,
       targetUserId: user.id
@@ -650,7 +655,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       backendConversationId: undefined,
       type: "group",
       title: group.name,
-      lastMessage: "Group conversation ready",
+      lastMessage: tr("store.groupConversationReady"),
       lastMessageAt: Date.now(),
       unreadCount: 0,
       groupId: group.id

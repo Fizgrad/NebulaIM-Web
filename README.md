@@ -1,138 +1,78 @@
 # NebulaIM Web
 
-<p align="center">
-  <img src="public/logo.png" alt="NebulaIM Logo" width="420" />
-</p>
+## English
 
-NebulaIM Web is the React web client for NebulaIM. It talks to the C++ Gateway with the NebulaIM binary Packet + Protobuf protocol, and uses the Web Bridge for browser-safe HTTP APIs and the public WebSocket entrypoint.
+NebulaIM Web is the React + TypeScript client for NebulaIM. It connects browser users to the C++ Gateway through the Web Bridge and keeps Gateway traffic on the NebulaIM binary Packet + Protobuf protocol.
 
-## Current Architecture
+### Current Architecture
 
 ```text
 Browser
   -> HTTP
-  -> NebulaIM Web Bridge :8080
+  -> Web Bridge
   -> gRPC
-UserService / RelationService / ConversationService / AdminService
+UserService / RelationService / ConversationService / MessageService / AdminService
 
 Browser
-  -> WebSocket /ws on NebulaIM Web Bridge :8080
-  -> transparent TCP proxy
-  -> NebulaIM Gateway 127.0.0.1:9000
+  -> WebSocket /ws
+  -> Web Bridge TCP proxy
+  -> C++ Gateway
   -> NebulaIM PacketHeader + Protobuf body
 MessageService / PushService / UserService
 ```
 
-The browser never sends JSON to Gateway. Gateway traffic remains NebulaIM binary frames. The public browser endpoint is the Bridge `/ws` route, because the production Gateway listens on loopback.
+The browser does not send JSON to the Gateway. Browser-safe HTTP routes are exposed by the Bridge, while `/ws` forwards binary Gateway frames.
 
-## Runtime Endpoints
+### User Interface
 
-Production endpoint values are deployment-specific. Use placeholders in documentation and keep real hostnames or IP addresses in environment variables, GitHub Actions secrets or server-side configuration.
+- `/` product entry page.
+- `/login` login through Gateway `LOGIN_REQ`.
+- `/register` registration through Gateway `REGISTER_REQ`.
+- `/app/chat` friend chat, group chat, Gateway heartbeat, ACK status and pushed messages.
+- `/app/contacts` friends, username or user ID friend requests, incoming requests and outgoing requests.
+- `/app/groups` joined group search, group creation, group name or ID search, join, leave and member list.
+- `/app/profile` current account and Gateway connection metadata.
+- `/app/settings` theme, language, endpoint and local action settings.
+- `/dashboard` Bridge health and AdminService runtime metrics.
+- `/admin` AdminService operations for health, service overview, audit events, outbox, Kafka lag and cleanup.
 
-```text
-Bridge HTTP:       http://<public-host>:8080
-Gateway WebSocket: ws://<public-host>:8080/ws
-Gateway TCP label: tcp://<public-host>:9000
-```
+### Language Support
 
-When the built app is served by the Bridge itself, the frontend uses same-origin endpoints:
+The client supports English and Chinese display modes. The selected language is stored in `nebulaim-settings` and can be changed from `/app/settings`.
 
-```text
-Bridge HTTP:       window.location.origin
-Gateway WebSocket: ws(s)://window.location.host/ws
-```
+Implementation files:
 
-Settings schema version `9` normalizes persisted endpoints to the current same-origin production defaults and the local Bridge defaults used by Vite development.
+- `src/i18n.ts`: translation dictionary and `useI18n()` hook.
+- `src/store/settingsStore.ts`: persisted `language` setting.
+- `src/App.tsx`: keeps `<html lang>` synchronized with the selected language.
 
-## Tech Stack
+### Runtime Endpoints
 
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
-- Zustand
-- React Router
-- Axios
-- Lucide React Icons
-- Recharts
-- Framer Motion
-- protobufjs
-
-## Pages
-
-- `/` product entry page
-- `/login` Gateway `LOGIN_REQ` over Bridge `/ws`
-- `/register` Gateway `REGISTER_REQ` over Bridge `/ws`
-- `/app/chat` conversation list, direct chat, group chat, Gateway heartbeat, ACK state and PUSH messages
-- `/app/contacts` RelationService friends plus incoming and outgoing friend requests
-- `/app/groups` RelationService groups with create, search, join, leave and member views
-- `/app/profile` current user and Gateway metadata
-- `/app/settings` Gateway WebSocket and Bridge HTTP endpoint controls
-- `/dashboard` Bridge health and AdminService live metrics
-- `/admin` AdminService console
-
-## Features
-
-- Gateway binary transport over WebSocket through Bridge `/ws`.
-- Browser-side PacketHeader encoder/decoder in `src/services/browserPacketCodec.ts`.
-- Browser-side Protobuf loading in `src/services/browserProtoRegistry.ts`.
-- Gateway client implementation in `src/services/directGatewayClient.ts`.
-- Bridge HTTP API layer for UserService, RelationService, MessageService, ConversationService, GatewayService presence and AdminService.
-- Relation workflow based on friend requests: send, list incoming/outgoing, accept and reject.
-- Friend requests can target either username or numeric backend `user_id`.
-- Group joining can search by group name or numeric group ID before sending the join request.
-- Conversation and message state backed by Gateway pushes, MessageService send APIs and Bridge message history loading.
-- Zustand stores split by domain.
-- Local persistence for auth token and settings.
-- Token expiry tracking and refresh through UserService.
-- HTTP request IDs and trace IDs.
-- HTTP retry and message retry actions.
-- Dashboard metrics loaded from AdminService health, system stats, service overview and audit events.
-- Admin console for health, system stats, service overview, audit events, outbox stats, Kafka lag and cleanup.
-
-## Directory Structure
+Endpoint values are deployment-specific and must stay in environment variables, GitHub Actions variables/secrets or server-side config.
 
 ```text
-nebulaim-web/
-├── bridge/
-│   ├── package.json
-│   ├── src/
-│   │   ├── index.ts
-│   │   ├── config.ts
-│   │   └── server/
-│   │       ├── httpServer.ts
-│   │       ├── authRoutes.ts
-│   │       ├── relationRoutes.ts
-│   │       ├── conversationRoutes.ts
-│   │       ├── messageRoutes.ts
-│   │       ├── presenceRoutes.ts
-│   │       └── adminRoutes.ts
-├── proto/
-├── public/
-│   ├── logo.png
-│   ├── favicon.svg
-│   └── proto/
-└── src/
-    ├── api/
-    ├── components/
-    ├── pages/
-    ├── routes/
-    ├── services/
-    ├── store/
-    ├── types/
-    └── utils/
+Bridge HTTP:        https://<bridge-host>
+Gateway WebSocket:  wss://<bridge-host>/ws
+Gateway TCP label:  tcp://<gateway-host>:9000
 ```
 
-## Install
+When the built app is served by the Bridge, the frontend uses same-origin defaults:
+
+```text
+Bridge HTTP:        window.location.origin
+Gateway WebSocket:  ws(s)://window.location.host/ws
+```
+
+### Development
+
+Install dependencies:
 
 ```bash
 npm install
 cd bridge && npm install
 ```
 
-## Development
-
-Start the NebulaIM backend and dependencies first. Then start the Bridge:
+Start the Bridge after the backend services are running:
 
 ```bash
 cd bridge
@@ -146,94 +86,36 @@ Start Vite in another shell:
 npm run dev
 ```
 
-Open:
-
-```text
-http://localhost:5173
-```
-
-Local development defaults point at a Bridge running on `127.0.0.1:8080`. Override them when Vite should connect to a different Bridge:
+Default local endpoints point to a Bridge on `127.0.0.1:8080`. Override them only when the browser must use a different Bridge:
 
 ```bash
-VITE_GATEWAY_WS_URL=ws://<bridge-host>:8080/ws VITE_BRIDGE_HTTP_URL=http://<bridge-host>:8080 npm run dev
+VITE_BRIDGE_HTTP_URL=http://<bridge-host>:8080 \
+VITE_GATEWAY_WS_URL=ws://<bridge-host>:8080/ws \
+npm run dev
 ```
 
-Use those overrides only for the browser-facing Bridge endpoint. The Bridge itself reaches backend services through its own environment configuration.
-
-## Build
+### Build
 
 ```bash
 npm run build
 cd bridge && npm run build
 ```
 
-## Preview
+### GitHub Pages Build
 
-```bash
-npm run preview
-```
-
-## Backend Ports
+The Pages workflow builds the static client with:
 
 ```text
-Gateway TCP/WebSocket: 9000
-Gateway RPC: 50055
-UserService: 50051
-MessageService: 50052
-RelationService: 50053
-PushService: 50054
-ConversationService: 50056
-AdminService: 50057
-Prometheus: 9090
-Grafana: 3000
+PAGES_BASE_PATH=/NebulaIM-Web/
+PAGES_BRIDGE_HTTP_URL=https://<bridge-host>
+PAGES_GATEWAY_WS_URL=wss://<bridge-host>/ws
 ```
 
-Gateway `:9000` is a backend-side address. Browser clients should use the Bridge WebSocket route unless Gateway is intentionally exposed.
+The app includes a `404.html` single-page fallback so direct links such as `/NebulaIM-Web/login` route correctly on GitHub Pages. Proto assets are loaded relative to `import.meta.env.BASE_URL`, so Pages sub-path deployment uses `/NebulaIM-Web/proto/*.proto`.
 
-## Gateway Protocol
+### Bridge HTTP API
 
-The frontend Gateway client opens a WebSocket to `/ws` on the Bridge. The Bridge forwards the WebSocket upgrade and all binary frames to the configured Gateway TCP address.
-
-```text
-WebSocket Binary Payload = NebulaIM PacketCodec bytes
-```
-
-Packet header:
-
-```text
-uint32 magic       0x4E494D42
-uint16 version     1
-uint16 type
-uint32 sequence_id
-uint32 body_length
-```
-
-Important message types:
-
-```text
-REGISTER_REQ=1003
-REGISTER_RESP=1004
-LOGIN_REQ=1001
-LOGIN_RESP=1002
-HEARTBEAT_REQ=1101
-HEARTBEAT_RESP=1102
-SEND_SINGLE_MSG_REQ=2001
-SEND_SINGLE_MSG_RESP=2002
-SEND_GROUP_MSG_REQ=2101
-SEND_GROUP_MSG_RESP=2102
-PUSH_MSG=3001
-ACK_REQ=4001
-ACK_RESP=4002
-PULL_OFFLINE_MSG_REQ=5001
-PULL_OFFLINE_MSG_RESP=5002
-ERROR_RESP=9001
-```
-
-All packet bodies are Protobuf encoded. Proto files are synchronized from `~/NebulaIM/proto` into `proto/` and `public/proto/`.
-
-## Bridge HTTP API
-
-The Bridge exposes HTTP endpoints for backend gRPC services:
+The Bridge exposes HTTP routes over backend gRPC services:
 
 ```text
 GET  /health
@@ -245,220 +127,185 @@ POST /api/auth/register
 GET  /api/auth/users/:userId
 GET  /api/auth/users/by-username/:username
 
-GET  /api/relation/friends?userId=<id>
-GET  /api/relation/friend-requests?userId=<id>&incoming=true&status=0
+GET  /api/relation/friends
+GET  /api/relation/friend-requests
 POST /api/relation/friend-requests
 POST /api/relation/friend-requests/:requestId/accept
 POST /api/relation/friend-requests/:requestId/reject
-POST /api/relation/friends
-DELETE /api/relation/friends/:friendId?userId=<id>
-GET  /api/relation/groups?userId=<id>
-GET  /api/relation/groups/search?q=<name-or-id>&limit=20
+DELETE /api/relation/friends/:friendId
+GET  /api/relation/groups
+GET  /api/relation/groups/search
 POST /api/relation/groups
 POST /api/relation/groups/:groupId/join
 POST /api/relation/groups/:groupId/leave
 GET  /api/relation/groups/:groupId
-GET  /api/relation/groups/:groupId/members
 
-GET  /api/messages/conversations/:conversationId?userId=<id>&limit=50
+GET  /api/conversations
+GET  /api/conversations/:conversationId/messages
+POST /api/conversations/:conversationId/read
+
 POST /api/messages/single
 POST /api/messages/group
 
-GET  /api/presence/users?userIds=<id>,<id>
+GET  /api/presence
 
-GET    /api/conversations?userId=<id>&page=1&pageSize=50
-POST   /api/conversations/:conversationId/read
-DELETE /api/conversations/:conversationId
-POST   /api/conversations/:conversationId/pin
-POST   /api/conversations/:conversationId/mute
-
-GET  /api/admin/health
-GET  /api/admin/system-stats
-GET  /api/admin/outbox-stats
-GET  /api/admin/kafka-lag
-GET  /api/admin/service-overview
-GET  /api/admin/audit-events?limit=20
+GET  /api/admin/overview
 POST /api/admin/cleanup
 ```
 
-`GET /info` includes the configured backend service addresses and `websocket: "/ws"`.
+Admin routes require `X-Nebula-Admin-Token`. Do not commit raw AdminService tokens.
 
-Friend requests use these payloads:
+## 中文
 
-```json
-{
-  "fromUserId": "10001",
-  "toUserId": "10002",
-  "message": "hello"
-}
-```
+NebulaIM Web 是 NebulaIM 的 React + TypeScript 前端客户端。它通过 Web Bridge 连接浏览器和 C++ Gateway，并保持 Gateway 流量使用 NebulaIM 二进制 Packet + Protobuf 协议。
 
-```json
-{
-  "userId": "10002"
-}
-```
-
-The action payload is used for both accept and reject.
-
-Admin requests send the raw AdminService token as:
+### 当前架构
 
 ```text
-X-Nebula-Admin-Token: <token>
+浏览器
+  -> HTTP
+  -> Web Bridge
+  -> gRPC
+UserService / RelationService / ConversationService / MessageService / AdminService
+
+浏览器
+  -> WebSocket /ws
+  -> Web Bridge TCP 代理
+  -> C++ Gateway
+  -> NebulaIM PacketHeader + Protobuf body
+MessageService / PushService / UserService
 ```
 
-The Bridge forwards it to AdminService as gRPC metadata key `x-nebula-admin-token`.
+浏览器不会向 Gateway 发送 JSON。浏览器安全的 HTTP 路由由 Bridge 提供，`/ws` 负责转发二进制 Gateway 帧。
 
-## End-to-End Integration
+### 用户界面
 
-1. Start NebulaIM dependencies:
+- `/` 产品入口页。
+- `/login` 通过 Gateway `LOGIN_REQ` 登录。
+- `/register` 通过 Gateway `REGISTER_REQ` 注册。
+- `/app/chat` 好友聊天、群聊、Gateway 心跳、ACK 状态和推送消息。
+- `/app/contacts` 好友、按用户名或用户 ID 发送好友请求、收到的请求和发出的请求。
+- `/app/groups` 已加入群组搜索、创建群组、按群名称或 ID 搜索加入、退出和成员列表。
+- `/app/profile` 当前账号和 Gateway 连接信息。
+- `/app/settings` 主题、语言、端点和本地操作设置。
+- `/dashboard` Bridge 健康状态和 AdminService 运行指标。
+- `/admin` AdminService 的健康检查、服务概览、审计事件、Outbox、Kafka 滞后和清理操作。
 
-```bash
-cd ~/NebulaIM
-./scripts/start_deps.sh
-./scripts/init_topics.sh
+### 语言支持
+
+客户端支持英文和中文两种显示模式。语言设置保存在 `nebulaim-settings` 中，可以在 `/app/settings` 切换。
+
+实现文件：
+
+- `src/i18n.ts`：翻译字典和 `useI18n()` hook。
+- `src/store/settingsStore.ts`：持久化的 `language` 设置。
+- `src/App.tsx`：根据当前语言同步 `<html lang>`。
+
+### 运行端点
+
+端点值属于部署环境配置，应保存在环境变量、GitHub Actions variables/secrets 或服务端配置中。
+
+```text
+Bridge HTTP:        https://<bridge-host>
+Gateway WebSocket:  wss://<bridge-host>/ws
+Gateway TCP label:  tcp://<gateway-host>:9000
 ```
 
-2. Start backend services:
+当构建后的前端由 Bridge 自身托管时，前端使用同源默认值：
 
-```bash
-./scripts/start_services.sh
+```text
+Bridge HTTP:        window.location.origin
+Gateway WebSocket:  ws(s)://window.location.host/ws
 ```
 
-Or start services separately:
+### 本地开发
+
+安装依赖：
 
 ```bash
-./build/user_service/nebula_user_service --config config/nebula.conf
-./build/message_service/nebula_message_service --config config/nebula.conf
-./build/push_service/nebula_push_service --config config/nebula.conf
-./build/relation_service/nebula_relation_service --config config/nebula.conf
-./build/conversation_service/nebula_conversation_service --config config/nebula.conf
-./build/admin_service/nebula_admin_service --config config/nebula.conf
-./build/gateway/nebula_gateway --config config/nebula.conf
-```
-
-3. Start Web Bridge:
-
-```bash
-cd nebulaim-web/bridge
 npm install
+cd bridge && npm install
+```
+
+后端服务启动后启动 Bridge：
+
+```bash
+cd bridge
 cp .env.example .env
 npm run dev
 ```
 
-4. Start Web frontend:
+另开一个终端启动 Vite：
 
 ```bash
-cd nebulaim-web
-npm install
 npm run dev
 ```
 
-5. Open:
-
-```text
-http://localhost:5173
-```
-
-6. Verify the live flow:
-
-- Register two users.
-- Login both users in separate browser contexts.
-- From user A, send user B a friend request by username or numeric backend `user_id`.
-- From user B, accept the incoming friend request.
-- Confirm both users list each other as friends.
-- Open Chat and select the friend from the centered friend list.
-- Send a message.
-- Confirm sender status reaches `delivered`.
-- Confirm recipient receives `PUSH_MSG`.
-- Check ConversationService via `/api/conversations`.
-- Open `/admin`, enter an AdminService token from the backend config, then check health/outbox/kafka/cleanup.
-
-## Admin Tokens
-
-Admin tokens are owned by the backend config under `admin_service.admin_tokens`. The frontend stores only the value typed into the Admin page and sends it as `X-Nebula-Admin-Token`.
-
-Use scoped, non-development tokens before exposing the system.
-
-## Docker Compose
+本地默认端点指向 `127.0.0.1:8080` 上的 Bridge。只有浏览器需要连接其他 Bridge 时才覆盖：
 
 ```bash
-docker compose -f docker-compose.web.yml up --build
+VITE_BRIDGE_HTTP_URL=http://<bridge-host>:8080 \
+VITE_GATEWAY_WS_URL=ws://<bridge-host>:8080/ws \
+npm run dev
 ```
 
-The compose file runs Vite on `5173` and the Bridge on `8080`. The web container uses `ws://localhost:8080/ws` and `http://localhost:8080` from the browser, while the Bridge container reaches backend services through `host.docker.internal`.
-
-## GitHub Actions Deployment
-
-The workflow in `.github/workflows/deploy.yml` builds the frontend and Bridge, uploads a release archive over SSH and restarts the Bridge systemd service.
-
-Required GitHub Actions secrets:
-
-```text
-DEPLOY_HOST      SSH host or IP address
-DEPLOY_SSH_KEY   Private key with deploy access
-```
-
-Optional secrets or variables:
-
-```text
-DEPLOY_USER      SSH user, defaults to root
-DEPLOY_PORT      SSH port, defaults to 22
-DEPLOY_PATH      Server deploy path, defaults to /opt/nebulaim-web
-DEPLOY_SERVICE   systemd unit name, defaults to nebulaim-web-bridge.service
-```
-
-The workflow does not overwrite an existing server-side `bridge.env`. If `bridge.env` is missing, it initializes one from `deploy/production.env.example`.
-
-The deploy user must be `root` or have passwordless `sudo` for writing the deploy path and restarting systemd. The server must also have Node.js and npm available for installing Bridge production dependencies.
-
-## GitHub Pages Deployment
-
-The workflow in `.github/workflows/pages.yml` builds only the static React app and publishes `dist/` to GitHub Pages. GitHub Pages does not run the Bridge, so the app must connect to an externally deployed Bridge over HTTPS and WSS.
-
-Set these repository variables before running the workflow:
-
-```text
-PAGES_BRIDGE_HTTP_URL   https://<bridge-host>
-PAGES_GATEWAY_WS_URL    wss://<bridge-host>/ws
-```
-
-Optional repository variable:
-
-```text
-PAGES_BASE_PATH         /NebulaIM-Web/
-```
-
-Use `/` for `PAGES_BASE_PATH` only when GitHub Pages serves a custom domain at the domain root. For the standard project page URL, keep `/NebulaIM-Web/`.
-
-In repository settings, set Pages build and deployment source to GitHub Actions. The Bridge must allow the GitHub Pages origin through CORS and WebSocket origin checks.
-
-Direct page loads such as `/NebulaIM-Web/login` are handled by `public/404.html`, which redirects back to the Pages base path and restores the React Router route.
-
-## Verification
+### 构建
 
 ```bash
-npm run lint
 npm run build
-cd bridge && npm run lint
 cd bridge && npm run build
 ```
 
-For a running production-style Bridge:
+### GitHub Pages 构建
 
-```bash
-curl -s http://127.0.0.1:8080/health
-curl -s http://127.0.0.1:8080/info
+Pages workflow 使用以下变量构建静态客户端：
+
+```text
+PAGES_BASE_PATH=/NebulaIM-Web/
+PAGES_BRIDGE_HTTP_URL=https://<bridge-host>
+PAGES_GATEWAY_WS_URL=wss://<bridge-host>/ws
 ```
 
-## Common Issues
+应用包含 `404.html` 单页 fallback，因此 `/NebulaIM-Web/login` 这种直接访问链接可以在 GitHub Pages 上正确路由。Proto 资源基于 `import.meta.env.BASE_URL` 加载，所以 Pages 子路径部署会请求 `/NebulaIM-Web/proto/*.proto`。
 
-- Browser login fails: verify `GET /info` returns `websocket: "/ws"` and the browser settings use `ws://<host>:8080/ws`.
-- Bridge `/ws` returns `502`: verify Gateway is listening at `GATEWAY_TCP_HOST:GATEWAY_TCP_PORT`.
-- Gateway closes the socket: verify the frontend is sending binary WebSocket frames, not JSON/text frames.
-- Friend request accept fails: the accepting request body must contain the receiver's numeric `userId`.
-- Message send fails: verify `/info` includes the MessageService target and `/api/messages/single` can reach it.
-- Message does not reach MessageService: confirm `MESSAGE_SERVICE_HOST:MESSAGE_SERVICE_PORT` points to the running backend service.
-- Conversation list is empty: send a message first or verify `ConversationService :50056`.
-- Admin health works but cleanup fails: the token likely lacks `cleanup` scope.
-- Admin Kafka lag returns permission denied: use a token with `kafka` scope.
+### Bridge HTTP API
+
+Bridge 通过 HTTP 路由暴露后端 gRPC 服务：
+
+```text
+GET  /health
+GET  /info
+WS   /ws
+
+POST /api/auth/refresh
+POST /api/auth/register
+GET  /api/auth/users/:userId
+GET  /api/auth/users/by-username/:username
+
+GET  /api/relation/friends
+GET  /api/relation/friend-requests
+POST /api/relation/friend-requests
+POST /api/relation/friend-requests/:requestId/accept
+POST /api/relation/friend-requests/:requestId/reject
+DELETE /api/relation/friends/:friendId
+GET  /api/relation/groups
+GET  /api/relation/groups/search
+POST /api/relation/groups
+POST /api/relation/groups/:groupId/join
+POST /api/relation/groups/:groupId/leave
+GET  /api/relation/groups/:groupId
+
+GET  /api/conversations
+GET  /api/conversations/:conversationId/messages
+POST /api/conversations/:conversationId/read
+
+POST /api/messages/single
+POST /api/messages/group
+
+GET  /api/presence
+
+GET  /api/admin/overview
+POST /api/admin/cleanup
+```
+
+Admin 路由需要 `X-Nebula-Admin-Token`。不要提交明文 AdminService token。

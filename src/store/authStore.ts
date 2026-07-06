@@ -6,6 +6,7 @@ import { getGatewayClient, resetGatewayClient } from "../services/gatewayClient"
 import { useSettingsStore } from "./settingsStore";
 import { normalizeExpireAt, isTokenExpiringSoon } from "../services/authToken";
 import { clientLogger } from "../services/clientLogger";
+import { translate, type TranslationKey } from "../i18n";
 
 type AuthState = {
   user: User | null;
@@ -22,6 +23,10 @@ type AuthState = {
   logout: () => void;
   clearError: () => void;
 };
+
+function tr(key: TranslationKey) {
+  return translate(useSettingsStore.getState().language, key);
+}
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -62,7 +67,7 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Login failed."
+            error: error instanceof Error ? error.message : tr("store.loginFailed")
           });
           throw error;
         }
@@ -76,7 +81,7 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Registration failed."
+            error: error instanceof Error ? error.message : tr("store.registrationFailed")
           });
           throw error;
         }
@@ -97,7 +102,7 @@ export const useAuthStore = create<AuthState>()(
           return true;
         } catch (error) {
           clientLogger.warn("Auth token refresh failed", error);
-          set({ error: error instanceof Error ? error.message : "Token refresh failed." });
+          set({ error: error instanceof Error ? error.message : tr("store.tokenRefreshFailed") });
           return false;
         }
       },

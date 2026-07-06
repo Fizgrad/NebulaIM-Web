@@ -2,17 +2,20 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export type ThemeMode = "dark" | "light" | "system";
+export type LanguageMode = "en" | "zh";
 
 const developmentBridgeHost = "127.0.0.1:8080";
 
 type SettingsState = {
   theme: ThemeMode;
+  language: LanguageMode;
   gatewayUrl: string;
   directGatewayWsUrl: string;
   bridgeHttpUrl: string;
   autoReconnect: boolean;
   heartbeatIntervalMs: number;
   setTheme: (theme: ThemeMode) => void;
+  setLanguage: (language: LanguageMode) => void;
   setGatewayUrl: (url: string) => void;
   setDirectGatewayWsUrl: (url: string) => void;
   setBridgeHttpUrl: (url: string) => void;
@@ -23,12 +26,18 @@ type SettingsState = {
 
 const defaults = {
   theme: "dark" as ThemeMode,
+  language: defaultLanguage(),
   gatewayUrl: defaultGatewayUrl(),
   directGatewayWsUrl: import.meta.env.VITE_GATEWAY_WS_URL ?? defaultDirectGatewayWsUrl(),
   bridgeHttpUrl: import.meta.env.VITE_BRIDGE_HTTP_URL ?? defaultBridgeHttpUrl(),
   autoReconnect: true,
   heartbeatIntervalMs: 15000
 };
+
+function defaultLanguage(): LanguageMode {
+  if (typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("zh")) return "zh";
+  return "en";
+}
 
 function isDevServer() {
   return typeof window !== "undefined" && ["5173", "5174"].includes(window.location.port);
@@ -89,11 +98,16 @@ function isExternalPersistedUrl(value: string) {
   }
 }
 
+function normalizeLanguage(value: LanguageMode | undefined) {
+  return value === "zh" || value === "en" ? value : defaults.language;
+}
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       ...defaults,
       setTheme: (theme) => set({ theme }),
+      setLanguage: (language) => set({ language }),
       setGatewayUrl: (gatewayUrl) => set({ gatewayUrl }),
       setDirectGatewayWsUrl: (directGatewayWsUrl) => set({ directGatewayWsUrl }),
       setBridgeHttpUrl: (bridgeHttpUrl) => set({ bridgeHttpUrl }),
@@ -103,12 +117,13 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "nebulaim-settings",
-      version: 9,
+      version: 10,
       merge: (persistedState, currentState) => {
         const state = persistedState as Partial<SettingsState> | undefined;
         return {
           ...currentState,
           ...state,
+          language: normalizeLanguage(state?.language),
           gatewayUrl: normalizeGatewayUrl(state?.gatewayUrl),
           directGatewayWsUrl: normalizeDirectGatewayWsUrl(state?.directGatewayWsUrl),
           bridgeHttpUrl: normalizeBridgeHttpUrl(state?.bridgeHttpUrl)
@@ -118,6 +133,7 @@ export const useSettingsStore = create<SettingsState>()(
         const state = persistedState as Partial<SettingsState>;
         return {
           theme: state.theme ?? defaults.theme,
+          language: normalizeLanguage(state.language),
           gatewayUrl: normalizeGatewayUrl(state.gatewayUrl),
           directGatewayWsUrl: normalizeDirectGatewayWsUrl(state.directGatewayWsUrl),
           bridgeHttpUrl: normalizeBridgeHttpUrl(state.bridgeHttpUrl),

@@ -7,6 +7,7 @@ import { Modal } from "../components/common/Modal";
 import { PageContainer } from "../components/layout/PageContainer";
 import { useChatStore } from "../store/chatStore";
 import { useGroupStore } from "../store/groupStore";
+import { useI18n } from "../i18n";
 
 export function GroupsPage() {
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ export function GroupsPage() {
   const openConversationForGroup = useChatStore((state) => state.openConversationForGroup);
   const loadGroups = useGroupStore((state) => state.loadGroups);
   const loadGroupMembers = useGroupStore((state) => state.loadGroupMembers);
+  const { t } = useI18n();
 
   useEffect(() => {
     void loadGroups().catch(() => {
@@ -36,9 +38,9 @@ export function GroupsPage() {
   }
 
   return (
-    <PageContainer title="Groups" subtitle="Create, join, leave and inspect group conversations.">
+    <PageContainer title={t("groups.title")} subtitle={t("groups.subtitle")}>
       <GroupList onMessage={handleMessage} onMembers={(group) => void handleMembers(group)} />
-      <Modal open={Boolean(selectedGroup)} title={selectedGroup?.name ?? "Group members"} onClose={() => setSelectedGroup(null)}>
+      <Modal open={Boolean(selectedGroup)} title={selectedGroup?.name ?? t("groups.membersTitle")} onClose={() => setSelectedGroup(null)}>
         <GroupMemberList members={selectedGroup?.members ?? []} />
       </Modal>
     </PageContainer>

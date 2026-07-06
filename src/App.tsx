@@ -6,6 +6,7 @@ import { useAuthStore } from "./store/authStore";
 
 export default function App() {
   const theme = useSettingsStore((state) => state.theme);
+  const language = useSettingsStore((state) => state.language);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const ensureFreshToken = useAuthStore((state) => state.ensureFreshToken);
 
@@ -24,6 +25,10 @@ export default function App() {
     media.addEventListener("change", applyTheme);
     return () => media.removeEventListener("change", applyTheme);
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+  }, [language]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
