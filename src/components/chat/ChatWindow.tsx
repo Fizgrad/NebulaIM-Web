@@ -21,6 +21,7 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
   const conversations = useChatStore((state) => state.conversations);
   const messagesByConversationId = useChatStore((state) => state.messagesByConversationId);
   const sendMessage = useChatStore((state) => state.sendMessage);
+  const sendImageMessage = useChatStore((state) => state.sendImageMessage);
   const retryMessage = useChatStore((state) => state.retryMessage);
   const gatewayStatus = useChatStore((state) => state.gatewayStatus);
   const markConversationRead = useChatStore((state) => state.markConversationRead);
@@ -114,6 +115,7 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
       <MessageInput
         disabled={gatewayStatus.state !== "connected"}
         onSend={(content) => sendMessage(conversation.id, content)}
+        onSendImage={(file) => sendImageMessage(conversation.id, file)}
       />
     </section>
   );

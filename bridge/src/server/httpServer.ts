@@ -11,11 +11,12 @@ import { createConversationRouter } from "./conversationRoutes.js";
 import { createMessageRouter } from "./messageRoutes.js";
 import { createPresenceRouter } from "./presenceRoutes.js";
 import { createRelationRouter } from "./relationRoutes.js";
+import { createUploadRouter } from "./uploadRoutes.js";
 
 export function createHttpServer(config: BridgeConfig): http.Server {
   const app = express();
   app.use(cors({ origin: config.corsOrigin }));
-  app.use(express.json());
+  app.use(express.json({ limit: config.jsonBodyLimit }));
 
   app.get("/health", (_req, res) => {
     res.json({
@@ -42,7 +43,17 @@ export function createHttpServer(config: BridgeConfig): http.Server {
   app.use("/api/relation", createRelationRouter());
   app.use("/api/conversations", createConversationRouter());
   app.use("/api/presence", createPresenceRouter());
+  app.use("/api/uploads", createUploadRouter());
   app.use("/api/admin", createAdminRouter());
+
+  app.use(
+    "/uploads",
+    express.static(config.uploadDir, {
+      index: false,
+      immutable: true,
+      maxAge: "30d"
+    })
+  );
 
   if (config.webStaticDir && fs.existsSync(path.join(config.webStaticDir, "index.html"))) {
     app.use(

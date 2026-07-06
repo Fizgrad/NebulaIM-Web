@@ -2,6 +2,8 @@ node_modules/
 dist/
 bridge/node_modules/
 bridge/dist/
+bridge/uploads/
+uploads/
 
 .env
 .env.*

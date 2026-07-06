@@ -2,6 +2,7 @@ import axios from "axios";
 import type { BridgeHealth, BridgeInfo } from "../types/bridge";
 import { ApiError, httpClient, requestWithRetry } from "./client";
 import type { Group } from "../types/group";
+import type { MessageContentType } from "../types/message";
 import type { User } from "../types/user";
 
 type BridgeErrorResponse = {
@@ -86,6 +87,14 @@ type SendBridgeMessageResponse = {
   messageId: string;
   serverTimestamp: number | string;
   response: CommonBridgeResponse;
+};
+
+type UploadBridgeImageResponse = {
+  ok: boolean;
+  url: string;
+  path: string;
+  mimeType: string;
+  size: number;
 };
 
 export type BridgeMessageInfo = {
@@ -503,12 +512,32 @@ export async function listBridgeConversationMessages(
   return response.messages ?? [];
 }
 
+export async function uploadBridgeImage(baseUrl: string, dataUrl: string, fileName?: string) {
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.post<UploadBridgeImageResponse>(`${baseUrl.replace(/\/$/, "")}/api/uploads/images`, {
+          dataUrl,
+          fileName
+        }),
+      { retries: 1 }
+    )
+  );
+  return {
+    url: response.url,
+    path: response.path,
+    mimeType: response.mimeType,
+    size: Number(response.size ?? 0)
+  };
+}
+
 export async function sendBridgeSingleMessage(
   baseUrl: string,
   fromUserId: string,
   toUserId: string,
   content: string,
-  clientSequenceId: number
+  clientSequenceId: number,
+  contentType: MessageContentType = "text"
 ) {
   const response = await bridgeRequest(() =>
     requestWithRetry(
@@ -516,6 +545,7 @@ export async function sendBridgeSingleMessage(
         httpClient.post<SendBridgeMessageResponse>(`${baseUrl.replace(/\/$/, "")}/api/messages/single`, {
           fromUserId,
           toUserId,
+          contentType,
           content,
           clientSequenceId
         }),
@@ -534,7 +564,8 @@ export async function sendBridgeGroupMessage(
   fromUserId: string,
   groupId: string,
   content: string,
-  clientSequenceId: number
+  clientSequenceId: number,
+  contentType: MessageContentType = "text"
 ) {
   const response = await bridgeRequest(() =>
     requestWithRetry(
@@ -542,6 +573,7 @@ export async function sendBridgeGroupMessage(
         httpClient.post<SendBridgeMessageResponse>(`${baseUrl.replace(/\/$/, "")}/api/messages/group`, {
           fromUserId,
           groupId,
+          contentType,
           content,
           clientSequenceId
         }),

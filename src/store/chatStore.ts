@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Conversation } from "../types/conversation";
 import type { Group } from "../types/group";
-import type { Message, MessageStatus } from "../types/message";
+import type { Message, MessageContentType, MessageStatus } from "../types/message";
 import type { User } from "../types/user";
 import type { GatewayStatus } from "../services/gatewayClient";
 import { useAuthStore } from "./authStore";
@@ -20,7 +20,8 @@ import {
   listBridgeConversations,
   markBridgeConversationRead,
   sendBridgeGroupMessage,
-  sendBridgeSingleMessage
+  sendBridgeSingleMessage,
+  uploadBridgeImage
 } from "../api/bridgeApi";
 import { translate, type TranslationKey } from "../i18n";
 
@@ -42,6 +43,7 @@ type ChatState = {
   loadConversations: () => Promise<void>;
   loadMessages: (conversationId: string) => Promise<void>;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
+  sendImageMessage: (conversationId: string, file: File) => Promise<void>;
   retryMessage: (conversationId: string, messageId: string) => Promise<void>;
   receiveMessage: (message: Message) => void;
   markConversationRead: (conversationId: string) => Promise<void>;
@@ -192,7 +194,7 @@ function mapBackendConversation(item: BackendConversationInfo, friendById: Map<s
     title: isGroup ? groupName ?? groupConversationTitle(groupId, item.conversationId) : friend?.nickname ?? `User ${peerUserId ?? item.conversationId}`,
     avatar: friend?.avatar,
     online: isGroup ? undefined : friend ? friend.status === "online" : false,
-    lastMessage: item.lastMessagePreview || tr("store.noMessagesYet"),
+    lastMessage: conversationPreviewFromBackend(item.lastMessagePreview),
     lastMessageAt: Number(item.lastMessageAt || item.updatedAt || Date.now()),
     unreadCount: item.unreadCount,
     pinned: item.pinned,
@@ -210,6 +212,28 @@ function messageStatusFromBackend(status: number, isMine: boolean): MessageStatu
   return "delivered";
 }
 
+function messageContentTypeFromBackend(contentType: number): MessageContentType {
+  return contentType === 2 ? "image" : "text";
+}
+
+function messagePreview(content: string, contentType: MessageContentType) {
+  return contentType === "image" ? tr("store.imageMessage") : content;
+}
+
+function isImageUrl(value: string) {
+  try {
+    const url = new URL(value, "http://nebulaim.local");
+    return /\/uploads\/images\/[^/]+\.(png|jpe?g|webp|gif)$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function conversationPreviewFromBackend(preview: string) {
+  if (!preview) return tr("store.noMessagesYet");
+  return isImageUrl(preview) ? tr("store.imageMessage") : preview;
+}
+
 function mapBridgeMessage(item: BridgeMessageInfo, conversationId: string, currentUserId: string): Message {
   const groupId = item.groupId && item.groupId !== "0" ? item.groupId : undefined;
   const toUserId = item.toUserId && item.toUserId !== "0" ? item.toUserId : undefined;
@@ -224,7 +248,7 @@ function mapBridgeMessage(item: BridgeMessageInfo, conversationId: string, curre
     senderName: sender?.nickname,
     senderAvatar: sender?.avatar,
     content: item.recalled ? tr("store.messageRecalled") : item.content,
-    contentType: "text",
+    contentType: item.recalled ? "text" : messageContentTypeFromBackend(item.contentType),
     status: messageStatusFromBackend(item.status, isMine),
     createdAt: Number(item.createdAt || Date.now()),
     isMine
@@ -263,7 +287,7 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
     if (!isNumericId(conversation.groupId)) {
       throw new Error(tr("store.groupIdNumeric"));
     }
-    const result = await sendBridgeGroupMessage(settings.bridgeHttpUrl, userId, conversation.groupId, message.content, sequenceId);
+    const result = await sendBridgeGroupMessage(settings.bridgeHttpUrl, userId, conversation.groupId, message.content, sequenceId, message.contentType);
     updateStatus("sent");
     updateStatus("delivered");
     return result;
@@ -271,11 +295,20 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
     if (!isNumericId(conversation.targetUserId)) {
       throw new Error(tr("store.recipientNumeric"));
     }
-    const result = await sendBridgeSingleMessage(settings.bridgeHttpUrl, userId, conversation.targetUserId, message.content, sequenceId);
+    const result = await sendBridgeSingleMessage(settings.bridgeHttpUrl, userId, conversation.targetUserId, message.content, sequenceId, message.contentType);
     updateStatus("sent");
     updateStatus("delivered");
     return result;
   }
+}
+
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read image file."));
+    reader.readAsDataURL(file);
+  });
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -456,7 +489,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       conversations: sortConversations(
         state.conversations.map((item) =>
           item.id === conversationId
-            ? { ...item, lastMessage: trimmed, lastMessageAt: message.createdAt, unreadCount: 0 }
+            ? { ...item, lastMessage: messagePreview(trimmed, "text"), lastMessageAt: message.createdAt, unreadCount: 0 }
             : item
         )
       )
@@ -476,6 +509,63 @@ export const useChatStore = create<ChatState>((set, get) => ({
       await get().loadMessages(conversationId);
     } catch (error) {
       clientLogger.warn("Message send failed", error);
+      get().updateMessageStatus(conversationId, message.id, "failed");
+    }
+  },
+  sendImageMessage: async (conversationId, file) => {
+    const conversation = get().conversations.find((item) => item.id === conversationId);
+    if (!conversation) return;
+
+    const userId = useAuthStore.getState().user?.id;
+    if (!isNumericId(userId)) return;
+
+    const settings = useSettingsStore.getState();
+    const dataUrl = await fileToDataUrl(file);
+    const uploaded = await uploadBridgeImage(settings.bridgeHttpUrl, dataUrl, file.name);
+
+    const message: Message = {
+      id: createId("local"),
+      conversationId,
+      fromUserId: userId,
+      toUserId: conversation.targetUserId,
+      groupId: conversation.groupId,
+      senderName: useAuthStore.getState().user?.nickname,
+      senderAvatar: useAuthStore.getState().user?.avatar,
+      content: uploaded.url,
+      contentType: "image",
+      status: "sending",
+      createdAt: Date.now(),
+      isMine: true
+    };
+
+    set((state) => ({
+      messagesByConversationId: {
+        ...state.messagesByConversationId,
+        [conversationId]: [...(state.messagesByConversationId[conversationId] ?? []), message]
+      },
+      conversations: sortConversations(
+        state.conversations.map((item) =>
+          item.id === conversationId
+            ? { ...item, lastMessage: messagePreview(message.content, message.contentType), lastMessageAt: message.createdAt, unreadCount: 0 }
+            : item
+        )
+      )
+    }));
+
+    try {
+      const result = await deliverMessage(conversation, message, (status) => get().updateMessageStatus(conversationId, message.id, status));
+      set((state) => ({
+        messagesByConversationId: {
+          ...state.messagesByConversationId,
+          [conversationId]: (state.messagesByConversationId[conversationId] ?? []).map((item) =>
+            item.id === message.id ? { ...item, id: result.messageId || item.id, createdAt: result.serverTimestamp || item.createdAt } : item
+          )
+        }
+      }));
+      await get().loadConversations();
+      await get().loadMessages(conversationId);
+    } catch (error) {
+      clientLogger.warn("Image message send failed", error);
       get().updateMessageStatus(conversationId, message.id, "failed");
     }
   },
@@ -523,7 +613,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 ...conversation,
                 title: group ? group.name : conversation.title,
                 online: message.groupId ? conversation.online : senderUser ? senderUser.status === "online" : conversation.online ?? false,
-                lastMessage: message.content,
+                lastMessage: messagePreview(message.content, message.contentType),
                 lastMessageAt: message.createdAt,
                 unreadCount: isActive ? 0 : conversation.unreadCount + 1
               }
@@ -536,7 +626,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           title: message.groupId ? groupConversationTitle(message.groupId) : senderUser?.nickname ?? directConversationTitle(message.fromUserId),
           avatar: senderUser?.avatar,
           online: message.groupId ? undefined : senderUser ? senderUser.status === "online" : false,
-          lastMessage: message.content,
+          lastMessage: messagePreview(message.content, message.contentType),
           lastMessageAt: message.createdAt,
           unreadCount: isActive ? 0 : 1,
           targetUserId: message.groupId ? undefined : message.fromUserId,

@@ -1,4 +1,4 @@
-export type MessageContentType = "text";
+export type MessageContentType = "text" | "image";
 
 export type MessageStatus = "sending" | "sent" | "delivered" | "read" | "failed";
 

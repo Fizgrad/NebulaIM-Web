@@ -9,7 +9,7 @@ import type {
   SendSingleMessagePayload,
   StatusHandler
 } from "../types/gateway";
-import type { Message } from "../types/message";
+import type { Message, MessageContentType } from "../types/message";
 import { BrowserPacketCodec } from "./browserPacketCodec";
 import { decodeProto, encodeProto } from "./browserProtoRegistry";
 import { clientLogger } from "./clientLogger";
@@ -87,7 +87,7 @@ type ProtoMessageData = {
   toUserId?: string;
   groupId?: string;
   content: string;
-  contentType: string;
+  contentType: string | number;
   timestamp: string | number;
   serverTimestamp?: string | number;
 };
@@ -227,7 +227,7 @@ export class DirectGatewayClient implements GatewayClient {
         requestId: this.requestId("send-single"),
         fromUserId: toProtoUInt64(payload.fromUserId || this.userId || "0", "fromUserId"),
         toUserId: toProtoUInt64(payload.toUserId, "toUserId"),
-        contentType: 1,
+        contentType: toProtoContentType(payload.contentType),
         content: payload.content,
         clientSequenceId: payload.clientSequenceId
       },
@@ -250,7 +250,7 @@ export class DirectGatewayClient implements GatewayClient {
         requestId: this.requestId("send-group"),
         fromUserId: toProtoUInt64(payload.fromUserId || this.userId || "0", "fromUserId"),
         groupId: toProtoUInt64(payload.groupId, "groupId"),
-        contentType: 1,
+        contentType: toProtoContentType(payload.contentType),
         content: payload.content,
         clientSequenceId: payload.clientSequenceId
       },
@@ -440,7 +440,7 @@ export class DirectGatewayClient implements GatewayClient {
       toUserId,
       groupId,
       content: payload.content,
-      contentType: "text",
+      contentType: fromProtoContentType(payload.contentType),
       status: "delivered",
       createdAt: Number(payload.serverTimestamp || payload.timestamp || Date.now()),
       isMine: fromUserId === this.userId
@@ -530,4 +530,12 @@ function toProtoUInt64(value: string | number, fieldName: string): string | numb
   }
   const numericValue = Number(normalized);
   return Number.isSafeInteger(numericValue) ? numericValue : normalized;
+}
+
+function toProtoContentType(contentType: MessageContentType) {
+  return contentType === "image" ? 2 : 1;
+}
+
+function fromProtoContentType(contentType: string | number | undefined): MessageContentType {
+  return contentType === 2 || contentType === "2" || contentType === "MESSAGE_CONTENT_TYPE_IMAGE" ? "image" : "text";
 }

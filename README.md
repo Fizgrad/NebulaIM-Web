@@ -30,7 +30,7 @@ The browser does not send JSON to the Gateway. Browser-safe HTTP routes are expo
 - `/` product entry page.
 - `/login` login through Gateway `LOGIN_REQ`.
 - `/register` registration through Gateway `REGISTER_REQ`.
-- `/app/chat` friend chat, group chat, Gateway heartbeat, ACK status and pushed messages.
+- `/app/chat` friend chat, group chat, image messages, Gateway heartbeat, ACK status and pushed messages.
 - `/app/contacts` friends, username or user ID friend requests, incoming requests and outgoing requests.
 - `/app/groups` joined group search, group creation, group name or ID search, join, leave and member list.
 - `/app/profile` current account and Gateway connection metadata.
@@ -146,6 +146,7 @@ GET  /api/conversations
 GET  /api/conversations/:conversationId/messages
 POST /api/conversations/:conversationId/read
 
+POST /api/uploads/images
 POST /api/messages/single
 POST /api/messages/group
 
@@ -156,6 +157,8 @@ POST /api/admin/cleanup
 ```
 
 Admin routes require `X-Nebula-Admin-Token`. Do not commit raw AdminService tokens.
+
+Image messages use `POST /api/uploads/images` first. The Bridge stores PNG, JPEG, WebP or GIF files under `UPLOAD_DIR`, serves them from `/uploads/images/...`, and the frontend sends the returned URL as a `contentType: "image"` message.
 
 ## 中文
 
@@ -185,7 +188,7 @@ MessageService / PushService / UserService
 - `/` 产品入口页。
 - `/login` 通过 Gateway `LOGIN_REQ` 登录。
 - `/register` 通过 Gateway `REGISTER_REQ` 注册。
-- `/app/chat` 好友聊天、群聊、Gateway 心跳、ACK 状态和推送消息。
+- `/app/chat` 好友聊天、群聊、图片消息、Gateway 心跳、ACK 状态和推送消息。
 - `/app/contacts` 好友、按用户名或用户 ID 发送好友请求、收到的请求和发出的请求。
 - `/app/groups` 已加入群组搜索、创建群组、按群名称或 ID 搜索加入、退出和成员列表。
 - `/app/profile` 当前账号和 Gateway 连接信息。
@@ -301,6 +304,7 @@ GET  /api/conversations
 GET  /api/conversations/:conversationId/messages
 POST /api/conversations/:conversationId/read
 
+POST /api/uploads/images
 POST /api/messages/single
 POST /api/messages/group
 
@@ -311,3 +315,5 @@ POST /api/admin/cleanup
 ```
 
 Admin 路由需要 `X-Nebula-Admin-Token`。不要提交明文 AdminService token。
+
+图片消息会先调用 `POST /api/uploads/images`。Bridge 将 PNG、JPEG、WebP 或 GIF 保存到 `UPLOAD_DIR`，通过 `/uploads/images/...` 访问，前端再把返回的 URL 作为 `contentType: "image"` 消息发送。

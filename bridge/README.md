@@ -51,8 +51,10 @@ CORS_ORIGIN=http://localhost:5173
 LOG_LEVEL=info
 HEARTBEAT_INTERVAL_MS=15000
 GATEWAY_REQUEST_TIMEOUT_MS=5000
+JSON_BODY_LIMIT=8mb
 PROTO_DIR=../proto
 WEB_STATIC_DIR=
+UPLOAD_DIR=uploads
 
 MYSQL_HOST=
 MYSQL_PORT=3306
@@ -63,6 +65,8 @@ MYSQL_CONNECTION_LIMIT=5
 ```
 
 `WEB_STATIC_DIR` can point to the built frontend directory, for example `/opt/nebulaim-web/web`, so the Bridge process can serve the SPA. When the Bridge serves the SPA, frontend routes fall back to `index.html` and `/api/*` routes remain API-only.
+
+`UPLOAD_DIR` stores uploaded chat images. Files are served from `/uploads/images/...`; keep this directory out of git and back it up as runtime data when needed.
 
 `MYSQL_*` enables read-only message history loading for opened conversations. The Bridge verifies that `userId` owns the requested conversation before reading from the `messages` table.
 
@@ -177,6 +181,7 @@ The Bridge forwards these calls to `nebula.proto.RelationService` on `RELATION_S
 
 ```text
 GET  /api/messages/conversations/:conversationId?userId=<id>&limit=50
+POST /api/uploads/images
 POST /api/messages/single
 POST /api/messages/group
 ```
@@ -187,6 +192,7 @@ Direct message request:
 {
   "fromUserId": "10001",
   "toUserId": "10002",
+  "contentType": "text",
   "content": "hello",
   "clientSequenceId": 123456
 }
@@ -198,12 +204,24 @@ Group message request:
 {
   "fromUserId": "10001",
   "groupId": "20001",
+  "contentType": "text",
   "content": "hello",
   "clientSequenceId": 123456
 }
 ```
 
-The Bridge forwards these calls to `nebula.proto.MessageService` on `MESSAGE_SERVICE_HOST:MESSAGE_SERVICE_PORT`. The frontend uses these endpoints for sending messages so a refreshed browser session can send even when the Gateway WebSocket has not re-run `LOGIN_REQ`.
+Image upload request:
+
+```json
+{
+  "dataUrl": "data:image/png;base64,...",
+  "fileName": "photo.png"
+}
+```
+
+The upload response returns an absolute `url`. Send that URL with `contentType: "image"` through `/api/messages/single` or `/api/messages/group`. The Bridge accepts PNG, JPEG, WebP and GIF up to 5 MiB.
+
+The Bridge forwards message send calls to `nebula.proto.MessageService` on `MESSAGE_SERVICE_HOST:MESSAGE_SERVICE_PORT`. The frontend uses these endpoints for sending messages so a refreshed browser session can send even when the Gateway WebSocket has not re-run `LOGIN_REQ`.
 
 Conversation history is read from MySQL using `MYSQL_*` because the current MessageService protobuf does not expose a list-history RPC.
 

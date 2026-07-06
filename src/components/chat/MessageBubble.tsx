@@ -23,6 +23,7 @@ const statusIcon: Record<MessageStatus, JSX.Element> = {
 export function MessageBubble({ message, showSenderName = false, onRetry }: MessageBubbleProps) {
   const { t, locale } = useI18n();
   const senderName = message.senderName ?? `User ${message.fromUserId}`;
+  const isImage = message.contentType === "image";
 
   return (
     <div className={cn("flex gap-3", message.isMine ? "justify-end" : "justify-start")}>
@@ -33,16 +34,28 @@ export function MessageBubble({ message, showSenderName = false, onRetry }: Mess
         ) : null}
         <div
           className={cn(
-            "flex w-fit max-w-full flex-col gap-1.5 rounded-lg px-4 py-3 shadow-panel transition-[width,max-width] duration-200",
+            "flex w-fit max-w-full flex-col gap-1.5 rounded-lg shadow-panel transition-[width,max-width] duration-200",
+            isImage ? "p-1.5" : "px-4 py-3",
             message.isMine
               ? "bg-primary-gradient text-white"
               : "border border-nebula-border bg-white/[0.06] text-slate-100"
           )}
         >
-          <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.content}</div>
+          {isImage ? (
+            <a href={message.content} target="_blank" rel="noreferrer" className="block max-w-full">
+              <img
+                src={message.content}
+                alt={t("chat.imageMessage")}
+                loading="lazy"
+                className="max-h-72 max-w-full rounded-md object-contain sm:max-h-96"
+              />
+            </a>
+          ) : (
+            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.content}</div>
+          )}
           <div
             className={cn(
-              "flex w-fit max-w-full items-center gap-1.5 self-end whitespace-nowrap text-[11px]",
+              "flex w-fit max-w-full items-center gap-1.5 self-end whitespace-nowrap px-1 text-[11px]",
               message.isMine ? "text-white/85" : "text-nebula-muted"
             )}
           >

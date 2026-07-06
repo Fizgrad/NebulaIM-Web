@@ -49,6 +49,7 @@ const historyQuerySchema = z.object({
 const sendSingleSchema = z.object({
   fromUserId: numericIdSchema,
   toUserId: numericIdSchema,
+  contentType: z.enum(["text", "image", "MESSAGE_CONTENT_TYPE_TEXT", "MESSAGE_CONTENT_TYPE_IMAGE"]).optional().default("text"),
   content: z.string().trim().min(1, "Message content is required.").max(4096, "Message content is too long."),
   clientSequenceId: z.coerce.number().int().min(0).max(999999).optional().default(0)
 });
@@ -56,6 +57,7 @@ const sendSingleSchema = z.object({
 const sendGroupSchema = z.object({
   fromUserId: numericIdSchema,
   groupId: numericIdSchema,
+  contentType: z.enum(["text", "image", "MESSAGE_CONTENT_TYPE_TEXT", "MESSAGE_CONTENT_TYPE_IMAGE"]).optional().default("text"),
   content: z.string().trim().min(1, "Message content is required.").max(4096, "Message content is too long."),
   clientSequenceId: z.coerce.number().int().min(0).max(999999).optional().default(0)
 });
@@ -136,7 +138,7 @@ export function createMessageRouter(): Router {
         requestId: requestId(req, "send_single_req"),
         fromUserId: Number(parsed.data.fromUserId),
         toUserId: Number(parsed.data.toUserId),
-        contentType: "MESSAGE_CONTENT_TYPE_TEXT",
+        contentType: toProtoContentType(parsed.data.contentType),
         content: parsed.data.content,
         clientSequenceId: parsed.data.clientSequenceId
       });
@@ -169,7 +171,7 @@ export function createMessageRouter(): Router {
         requestId: requestId(req, "send_group_req"),
         fromUserId: Number(parsed.data.fromUserId),
         groupId: Number(parsed.data.groupId),
-        contentType: "MESSAGE_CONTENT_TYPE_TEXT",
+        contentType: toProtoContentType(parsed.data.contentType),
         content: parsed.data.content,
         clientSequenceId: parsed.data.clientSequenceId
       });
@@ -258,6 +260,12 @@ function requestId(req: express.Request, prefix: string) {
 
 function isOk(response: CommonResponse) {
   return response.code === 0;
+}
+
+function toProtoContentType(contentType: string) {
+  return contentType === "image" || contentType === "MESSAGE_CONTENT_TYPE_IMAGE"
+    ? "MESSAGE_CONTENT_TYPE_IMAGE"
+    : "MESSAGE_CONTENT_TYPE_TEXT";
 }
 
 function sendValidationError(res: express.Response, message: string) {
