@@ -33,9 +33,22 @@ type MessageGrpcClient = grpc.Client & {
   SendGroupMessage: MessageUnary<SendMessageResponse>;
   AckMessage: MessageUnary<{ response: CommonResponse }>;
   MarkConversationRead: MessageUnary<CommonResponse>;
+  GetMessageReadState: MessageUnary<GetMessageReadStateResponse>;
 };
 
-type MessageMethod = "SendSingleMessage" | "SendGroupMessage" | "AckMessage" | "MarkConversationRead";
+type MessageMethod = "SendSingleMessage" | "SendGroupMessage" | "AckMessage" | "MarkConversationRead" | "GetMessageReadState";
+
+type MessageReadStateRow = {
+  messageId: string | number;
+  userId: string | number;
+  deliveredAt: string | number;
+  readAt: string | number;
+};
+
+type GetMessageReadStateResponse = {
+  response: CommonResponse;
+  states: MessageReadStateRow[];
+};
 
 type MessageServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => MessageGrpcClient;
 
@@ -44,6 +57,18 @@ const historyQuerySchema = z.object({
   userId: numericIdSchema,
   before: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50)
+});
+
+const readStateQuerySchema = z.object({
+  messageIds: z
+    .string()
+    .transform((value) =>
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+    .pipe(z.array(numericIdSchema).min(1, "At least one message ID is required.").max(100, "Too many message IDs."))
 });
 
 const sendSingleSchema = z.object({
@@ -190,6 +215,41 @@ export function createMessageRouter(): Router {
     } catch (error) {
       sendRpcError(res, "MessageService.SendGroupMessage failed.", error);
     }
+  });
+
+  router.get("/read-state", async (req, res) => {
+    const parsed = readStateQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid read-state query.");
+      return;
+    }
+
+    const results = await Promise.all(
+      parsed.data.messageIds.map(async (messageId) => {
+        try {
+          const response = await invokeMessage<GetMessageReadStateResponse>("GetMessageReadState", {
+            requestId: requestId(req, "read_state_req"),
+            messageId: Number(messageId)
+          });
+          if (!isOk(response.response)) {
+            return { messageId, states: [] };
+          }
+          return {
+            messageId,
+            states: (response.states ?? []).map((state) => ({
+              userId: String(state.userId),
+              deliveredAt: Number(state.deliveredAt ?? 0),
+              readAt: Number(state.readAt ?? 0)
+            }))
+          };
+        } catch (error) {
+          logger.warn("MessageService.GetMessageReadState failed.", { detail: error });
+          return { messageId, states: [] };
+        }
+      })
+    );
+
+    res.json({ ok: true, items: results });
   });
 
   return router;

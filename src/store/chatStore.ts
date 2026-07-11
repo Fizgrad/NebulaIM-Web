@@ -13,6 +13,7 @@ import { useGroupStore } from "./groupStore";
 import { clientLogger } from "../services/clientLogger";
 import {
   type BridgeMessageInfo,
+  getBridgeMessagesReadState,
   getBridgePresence,
   getBridgeGroup,
   getBridgeUserInfo,
@@ -42,6 +43,7 @@ type ChatState = {
   setActiveConversationId: (conversationId: string | null) => void;
   loadConversations: () => Promise<void>;
   loadMessages: (conversationId: string) => Promise<void>;
+  refreshReadState: (conversationId: string) => Promise<void>;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   sendImageMessage: (conversationId: string, file: File) => Promise<void>;
   retryMessage: (conversationId: string, messageId: string) => Promise<void>;
@@ -455,6 +457,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
           clientLogger.warn("Resolve message sender failed", error);
         });
     }
+
+    void get().refreshReadState(conversationId).catch((error) => {
+      clientLogger.warn("Refresh read state failed", error);
+    });
+  },
+  refreshReadState: async (conversationId) => {
+    const conversation = get().conversations.find((item) => item.id === conversationId);
+    const settings = useSettingsStore.getState();
+    const currentUserId = useAuthStore.getState().user?.id;
+    if (!conversation) return;
+
+    const currentMessages = get().messagesByConversationId[conversationId] ?? [];
+    const myDeliveredMessages = currentMessages.filter(
+      (message) => message.isMine && !message.id.startsWith("local_") && (message.status === "sent" || message.status === "delivered")
+    );
+    if (myDeliveredMessages.length === 0) return;
+
+    try {
+      const readStateMap = await getBridgeMessagesReadState(
+        settings.bridgeHttpUrl,
+        myDeliveredMessages.map((message) => message.id)
+      );
+      set((state) => {
+        const existing = state.messagesByConversationId[conversationId] ?? [];
+        const updated = existing.map((message) => {
+          if (!message.isMine || message.id.startsWith("local_")) return message;
+          if (message.status === "read" || message.status === "failed") return message;
+          const states = readStateMap[message.id] ?? [];
+          const peerStates = states.filter((stateItem) => String(stateItem.userId) !== String(currentUserId));
+          if (peerStates.length === 0) return message;
+          const anyRead = peerStates.some((stateItem) => Number(stateItem.readAt) > 0);
+          if (!anyRead) return message;
+          return { ...message, status: "read" as MessageStatus };
+        });
+        return {
+          messagesByConversationId: {
+            ...state.messagesByConversationId,
+            [conversationId]: updated
+          }
+        };
+      });
+    } catch (error) {
+      clientLogger.warn("Fetch read state failed", error);
+    }
   },
   sendMessage: async (conversationId, content) => {
     const trimmed = content.trim();
@@ -591,7 +637,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       get().updateMessageStatus(conversationId, messageId, "failed");
     }
   },
-  receiveMessage: (message) => {
+  receiveMessage: async (message) => {
     const currentUser = useAuthStore.getState().user;
     const senderUser = message.isMine ? currentUser ?? null : knownUser(message.fromUserId);
     const group = knownGroup(message.groupId);
@@ -680,6 +726,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           });
       }
     }
+
+    if (!message.isMine && !message.id.startsWith("local_") && isNumericId(currentUser?.id) && /^\d+$/.test(message.id)) {
+      try {
+        await getGatewayClient().ackMessage(message.id, currentUser!.id);
+      } catch (error) {
+        clientLogger.warn("Ack incoming message failed", error);
+      }
+    }
+
     void get()
       .loadConversations()
       .then(() => get().loadMessages(conversationId))

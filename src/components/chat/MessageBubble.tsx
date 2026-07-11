@@ -15,7 +15,7 @@ type MessageBubbleProps = {
 const statusIcon: Record<MessageStatus, JSX.Element> = {
   sending: <Clock className="h-3 w-3" />,
   sent: <Check className="h-3 w-3" />,
-  delivered: <CheckCheck className="h-3 w-3" />,
+  delivered: <Check className="h-3 w-3" />,
   read: <CheckCheck className="h-3 w-3" />,
   failed: <AlertCircle className="h-3 w-3 text-red-200" />
 };

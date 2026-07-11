@@ -512,6 +512,44 @@ export async function listBridgeConversationMessages(
   return response.messages ?? [];
 }
 
+export type BridgeMessageReadState = {
+  userId: string;
+  deliveredAt: number;
+  readAt: number;
+};
+
+export type BridgeMessageReadStateItem = {
+  messageId: string;
+  states: BridgeMessageReadState[];
+};
+
+type ListBridgeReadStateResponse = {
+  ok: boolean;
+  items: BridgeMessageReadStateItem[];
+};
+
+export async function getBridgeMessagesReadState(
+  baseUrl: string,
+  messageIds: string[]
+): Promise<Record<string, BridgeMessageReadState[]>> {
+  const uniqueIds = Array.from(new Set(messageIds.filter((id) => /^\d+$/.test(id))));
+  if (uniqueIds.length === 0) return {};
+  const response = await bridgeRequest(() =>
+    requestWithRetry(
+      () =>
+        httpClient.get<ListBridgeReadStateResponse>(`${baseUrl.replace(/\/$/, "")}/api/messages/read-state`, {
+          params: { messageIds: uniqueIds.join(",") }
+        }),
+      { retries: 1 }
+    )
+  );
+  const map: Record<string, BridgeMessageReadState[]> = {};
+  for (const item of response.items ?? []) {
+    map[item.messageId] = item.states ?? [];
+  }
+  return map;
+}
+
 export async function uploadBridgeImage(baseUrl: string, dataUrl: string, fileName?: string) {
   const response = await bridgeRequest(() =>
     requestWithRetry(

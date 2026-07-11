@@ -9,6 +9,7 @@ export function ChatPage() {
   const startGatewaySession = useChatStore((state) => state.startGatewaySession);
   const loadConversations = useChatStore((state) => state.loadConversations);
   const loadMessages = useChatStore((state) => state.loadMessages);
+  const refreshReadState = useChatStore((state) => state.refreshReadState);
   const setActiveConversationId = useChatStore((state) => state.setActiveConversationId);
 
   useEffect(() => {
@@ -45,6 +46,22 @@ export function ChatPage() {
       window.removeEventListener("focus", handleVisibilityChange);
     };
   }, [activeConversationId, loadConversations, loadMessages]);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+    let cancelled = false;
+
+    void refreshReadState(activeConversationId);
+    const timer = window.setInterval(() => {
+      if (cancelled || document.visibilityState === "hidden") return;
+      void refreshReadState(activeConversationId);
+    }, 15_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeConversationId, refreshReadState]);
 
   const hasActiveConversation = Boolean(activeConversationId);
 
