@@ -29,7 +29,7 @@ const configSchema = z.object({
   JSON_BODY_LIMIT: z.string().default("8mb"),
   PROTO_DIR: z.string().default("../proto"),
   WEB_STATIC_DIR: z.string().default(""),
-  UPLOAD_DIR: z.string().default("uploads"),
+  UPLOAD_DIR: z.string().default("../uploads"),
   MYSQL_HOST: z.string().default(""),
   MYSQL_PORT: z.coerce.number().int().min(1).max(65535).default(3306),
   MYSQL_USER: z.string().default(""),

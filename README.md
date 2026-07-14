@@ -158,7 +158,7 @@ POST /api/admin/cleanup
 
 Admin routes require `X-Nebula-Admin-Token`. Do not commit raw AdminService tokens.
 
-Image messages use `POST /api/uploads/images` first. The Bridge stores PNG, JPEG, WebP or GIF files under `UPLOAD_DIR`, serves them from `/uploads/images/...`, and the frontend sends the returned URL as a `contentType: "image"` message. When a user selects an image and also enters text, one send action sends the image message first and then sends the text message; the current protocol does not create a combined image-plus-text payload.
+Image messages use `POST /api/uploads/images` first. The Bridge stores PNG, JPEG, WebP or GIF files under `UPLOAD_DIR`, serves them from `/uploads/images/...`, and the frontend sends the returned URL as a `contentType: "image"` message. In production, `UPLOAD_DIR` must point outside the replaceable Bridge release directory and be backed up as runtime data. When a user selects an image and also enters text, one send action sends the image message first and then sends the text message; the current protocol does not create a combined image-plus-text payload.
 
 ## 中文
 
@@ -316,4 +316,4 @@ POST /api/admin/cleanup
 
 Admin 路由需要 `X-Nebula-Admin-Token`。不要提交明文 AdminService token。
 
-图片消息会先调用 `POST /api/uploads/images`。Bridge 将 PNG、JPEG、WebP 或 GIF 保存到 `UPLOAD_DIR`，通过 `/uploads/images/...` 访问，前端再把返回的 URL 作为 `contentType: "image"` 消息发送。当用户选择图片并输入文字时，一次发送动作会先发送图片消息，再发送文字消息；当前协议不生成图片加文字的复合消息体。
+图片消息会先调用 `POST /api/uploads/images`。Bridge 将 PNG、JPEG、WebP 或 GIF 保存到 `UPLOAD_DIR`，通过 `/uploads/images/...` 访问，前端再把返回的 URL 作为 `contentType: "image"` 消息发送。生产环境的 `UPLOAD_DIR` 必须放在可替换 Bridge release 目录之外，并作为运行数据备份。当用户选择图片并输入文字时，一次发送动作会先发送图片消息，再发送文字消息；当前协议不生成图片加文字的复合消息体。

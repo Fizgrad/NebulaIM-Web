@@ -54,7 +54,7 @@ GATEWAY_REQUEST_TIMEOUT_MS=5000
 JSON_BODY_LIMIT=8mb
 PROTO_DIR=../proto
 WEB_STATIC_DIR=
-UPLOAD_DIR=uploads
+UPLOAD_DIR=../uploads
 
 MYSQL_HOST=
 MYSQL_PORT=3306
@@ -66,7 +66,7 @@ MYSQL_CONNECTION_LIMIT=5
 
 `WEB_STATIC_DIR` can point to the built frontend directory, for example `/opt/nebulaim-web/web`, so the Bridge process can serve the SPA. When the Bridge serves the SPA, frontend routes fall back to `index.html` and `/api/*` routes remain API-only.
 
-`UPLOAD_DIR` stores uploaded chat images. Files are served from `/uploads/images/...`; keep this directory out of git and back it up as runtime data when needed.
+`UPLOAD_DIR` stores uploaded chat images. Files are served from `/uploads/images/...`; keep this directory outside the replaceable Bridge release directory, keep it out of git, and back it up as runtime data.
 
 `MYSQL_*` enables read-only message history loading for opened conversations. The Bridge verifies that `userId` owns the requested conversation before reading from the `messages` table.
 

@@ -197,6 +197,27 @@ jobs:
             ${SUDO} cp "${tmp_dir}/deploy/production.env.example" "${DEPLOY_PATH}/bridge.env"
           fi
 
+          env_file="${DEPLOY_PATH}/bridge.env"
+          configured_upload_dir="$(${SUDO} awk -F= '/^UPLOAD_DIR=/{sub(/^UPLOAD_DIR=/, ""); print}' "${env_file}" | tail -n 1 || true)"
+          upload_dir="${configured_upload_dir:-${DEPLOY_PATH}/uploads}"
+          case "${upload_dir}" in
+            /*) ;;
+            *) upload_dir="${DEPLOY_PATH}/${upload_dir}" ;;
+          esac
+
+          ${SUDO} mkdir -p "${upload_dir}/images"
+          if [ -d "${DEPLOY_PATH}/bridge/uploads" ] && [ "${upload_dir}" != "${DEPLOY_PATH}/bridge/uploads" ]; then
+            ${SUDO} cp -a "${DEPLOY_PATH}/bridge/uploads/." "${upload_dir}/"
+          fi
+          if ! ${SUDO} grep -q '^JSON_BODY_LIMIT=' "${env_file}"; then
+            printf '\nJSON_BODY_LIMIT=8mb\n' | ${SUDO} tee -a "${env_file}" >/dev/null
+          fi
+          if ${SUDO} grep -q '^UPLOAD_DIR=' "${env_file}"; then
+            ${SUDO} sed -i "s|^UPLOAD_DIR=.*|UPLOAD_DIR=${upload_dir}|" "${env_file}"
+          else
+            printf 'UPLOAD_DIR=%s\n' "${upload_dir}" | ${SUDO} tee -a "${env_file}" >/dev/null
+          fi
+
           ${SUDO} cp "${tmp_dir}/deploy/nebulaim-web-bridge.service" "/etc/systemd/system/${DEPLOY_SERVICE}"
           ${SUDO} systemctl daemon-reload
 
