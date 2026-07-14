@@ -1,11 +1,10 @@
 import type { Router } from "express";
 import express from "express";
-import fs from "node:fs/promises";
-import path from "node:path";
 import { z } from "zod";
 import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
+import { mediaKey, writeMediaObject } from "./mediaStorage.js";
 
 const maxImageBytes = 5 * 1024 * 1024;
 const maxDataUrlLength = Math.ceil(maxImageBytes * 1.4) + 128;
@@ -47,19 +46,19 @@ export function createUploadRouter(): Router {
     }
 
     try {
-      const imageDir = path.join(config.uploadDir, "images");
-      await fs.mkdir(imageDir, { recursive: true });
       const fileName = `${createId("image")}.${allowedImages[image.mimeType]}`;
-      const filePath = path.join(imageDir, fileName);
-      await fs.writeFile(filePath, image.buffer, { flag: "wx" });
+      const now = new Date();
+      const year = String(now.getUTCFullYear());
+      const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+      const object = await writeMediaObject(mediaKey(`images/${year}/${month}/${fileName}`), image.buffer, image.mimeType);
+      const publicLocation = mediaPublicLocation(req, object.key);
 
-      const urlPath = `/uploads/images/${fileName}`;
       res.status(201).json({
         ok: true,
-        url: `${publicBaseUrl(req)}${urlPath}`,
-        path: urlPath,
+        url: publicLocation.url,
+        path: publicLocation.path,
         mimeType: image.mimeType,
-        size: image.buffer.length
+        size: object.size
       });
     } catch (error) {
       logger.warn("Image upload failed.", { detail: error });
@@ -101,6 +100,23 @@ function matchesImageSignature(mimeType: keyof typeof allowedImages, buffer: Buf
     buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
     buffer.subarray(8, 12).toString("ascii") === "WEBP"
   );
+}
+
+function mediaPublicLocation(req: express.Request, key: string) {
+  const base = config.mediaPublicBaseUrl.replace(/\/+$/, "") || (config.mediaStorageDriver === "s3" ? "/media" : "/uploads");
+  const encodedKey = key.split("/").map(encodeURIComponent).join("/");
+  if (/^https?:\/\//i.test(base)) {
+    const url = `${base}/${encodedKey}`;
+    return {
+      url,
+      path: new URL(url).pathname
+    };
+  }
+  const path = `${base.startsWith("/") ? base : `/${base}`}/${encodedKey}`;
+  return {
+    url: `${publicBaseUrl(req)}${path}`,
+    path
+  };
 }
 
 function publicBaseUrl(req: express.Request) {

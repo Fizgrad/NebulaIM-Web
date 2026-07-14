@@ -33,7 +33,42 @@ services:
       - CORS_ORIGIN=http://localhost:5173
       - JSON_BODY_LIMIT=8mb
       - PROTO_DIR=/proto
+      - MEDIA_STORAGE_DRIVER=s3
+      - MEDIA_PUBLIC_BASE_URL=/media
       - UPLOAD_DIR=/uploads
+      - S3_ENDPOINT=http://nebulaim-minio:9000
+      - S3_REGION=us-east-1
+      - S3_BUCKET=nebulaim-media
+      - S3_ACCESS_KEY_ID=nebulaim
+      - S3_SECRET_ACCESS_KEY=REDACTED
+      - S3_FORCE_PATH_STYLE=true
     volumes:
       - ./proto:/proto:ro
       - ./bridge/uploads:/uploads
+    depends_on:
+      nebulaim-minio-init:
+        condition: service_completed_successfully
+
+  nebulaim-minio:
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    environment:
+      - MINIO_ROOT_USER=nebulaim
+      - MINIO_ROOT_PASSWORD=REDACTED
+    volumes:
+      - nebulaim_minio_data:/data
+
+  nebulaim-minio-init:
+    image: quay.io/minio/mc:latest
+    depends_on:
+      - nebulaim-minio
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      until mc alias set local http://nebulaim-minio:9000 nebulaim REDACTED; do sleep 1; done &&
+      mc mb --ignore-existing local/nebulaim-media
+
+volumes:
+  nebulaim_minio_data:

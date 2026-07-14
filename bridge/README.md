@@ -54,7 +54,18 @@ GATEWAY_REQUEST_TIMEOUT_MS=5000
 JSON_BODY_LIMIT=8mb
 PROTO_DIR=../proto
 WEB_STATIC_DIR=
+
+MEDIA_STORAGE_DRIVER=local
+MEDIA_PUBLIC_BASE_URL=/uploads
 UPLOAD_DIR=../uploads
+
+S3_ENDPOINT=http://127.0.0.1:19000
+S3_REGION=us-east-1
+S3_BUCKET=nebulaim-media
+S3_ACCESS_KEY_ID=
+S3_SECRET_ACCESS_KEY=
+S3_FORCE_PATH_STYLE=true
+S3_KEY_PREFIX=
 
 MYSQL_HOST=
 MYSQL_PORT=3306
@@ -66,7 +77,9 @@ MYSQL_CONNECTION_LIMIT=5
 
 `WEB_STATIC_DIR` can point to the built frontend directory, for example `/opt/nebulaim-web/web`, so the Bridge process can serve the SPA. When the Bridge serves the SPA, frontend routes fall back to `index.html` and `/api/*` routes remain API-only.
 
-`UPLOAD_DIR` stores uploaded chat images. Files are served from `/uploads/images/...`; keep this directory outside the replaceable Bridge release directory, keep it out of git, and back it up as runtime data.
+`MEDIA_STORAGE_DRIVER=local` stores uploaded chat images under `UPLOAD_DIR` and serves them from `/uploads/...`.
+
+`MEDIA_STORAGE_DRIVER=s3` uploads images to an S3-compatible store such as MinIO. `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` are required in that mode. The Bridge returns URLs under `MEDIA_PUBLIC_BASE_URL`, which is `/media` in production. The Bridge also serves `/media/...` by reading objects from S3, so the current Nginx reverse proxy can keep forwarding all web traffic to the Bridge.
 
 `MYSQL_*` enables read-only message history loading for opened conversations. The Bridge verifies that `userId` owns the requested conversation before reading from the `messages` table.
 
@@ -96,6 +109,7 @@ npm start
 ```text
 GET /health
 GET /info
+GET /media/<object-key>
 WS  /ws
 ```
 
@@ -220,6 +234,20 @@ Image upload request:
 ```
 
 The upload response returns an absolute `url`. Send that URL with `contentType: "image"` through `/api/messages/single` or `/api/messages/group`. The Bridge accepts PNG, JPEG, WebP and GIF up to 5 MiB. Image-plus-text sends are represented as two message sends: one image message followed by one text message.
+
+With `MEDIA_STORAGE_DRIVER=s3`, uploaded objects are stored in MinIO using keys such as `images/2026/07/image_*.png`, and the response URL points to `/media/images/2026/07/...`. With `MEDIA_STORAGE_DRIVER=local`, the response URL points to `/uploads/images/...`.
+
+## MinIO Deployment
+
+Production deploys use `deploy/setup-minio-media.sh` before the Bridge service restarts:
+
+```bash
+BRIDGE_ENV_FILE=/opt/nebulaim-web/bridge.env \
+MINIO_DATA_DIR=/opt/nebulaim-data/minio \
+bash deploy/setup-minio-media.sh
+```
+
+The script starts a `nebulaim-minio` container on `127.0.0.1:19000`, stores object data in `/opt/nebulaim-data/minio`, creates the `nebulaim-media` bucket, and writes missing S3 settings into the Bridge environment file. Generated credentials stay on the server only.
 
 The Bridge forwards message send calls to `nebula.proto.MessageService` on `MESSAGE_SERVICE_HOST:MESSAGE_SERVICE_PORT`. The frontend uses these endpoints for sending messages so a refreshed browser session can send even when the Gateway WebSocket has not re-run `LOGIN_REQ`.
 

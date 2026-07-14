@@ -4,6 +4,17 @@ import { z } from "zod";
 
 dotenv.config();
 
+const booleanEnv = (defaultValue: boolean) =>
+  z
+    .preprocess((value) => {
+      if (typeof value !== "string") return value;
+      const normalized = value.trim().toLowerCase();
+      if (["1", "true", "yes", "on"].includes(normalized)) return true;
+      if (["0", "false", "no", "off"].includes(normalized)) return false;
+      return value;
+    }, z.boolean())
+    .default(defaultValue);
+
 const configSchema = z.object({
   BRIDGE_HOST: z.string().default("0.0.0.0"),
   BRIDGE_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
@@ -29,7 +40,16 @@ const configSchema = z.object({
   JSON_BODY_LIMIT: z.string().default("8mb"),
   PROTO_DIR: z.string().default("../proto"),
   WEB_STATIC_DIR: z.string().default(""),
+  MEDIA_STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
+  MEDIA_PUBLIC_BASE_URL: z.string().default(""),
   UPLOAD_DIR: z.string().default("../uploads"),
+  S3_ENDPOINT: z.string().default(""),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_BUCKET: z.string().default("nebulaim-media"),
+  S3_ACCESS_KEY_ID: z.string().default(""),
+  S3_SECRET_ACCESS_KEY: z.string().default(""),
+  S3_FORCE_PATH_STYLE: booleanEnv(true),
+  S3_KEY_PREFIX: z.string().default(""),
   MYSQL_HOST: z.string().default(""),
   MYSQL_PORT: z.coerce.number().int().min(1).max(65535).default(3306),
   MYSQL_USER: z.string().default(""),
@@ -47,6 +67,25 @@ if (!parsed.success) {
 }
 
 const raw = parsed.data;
+
+if (raw.MEDIA_STORAGE_DRIVER === "s3") {
+  const missingS3Fields = [
+    ["S3_ENDPOINT", raw.S3_ENDPOINT],
+    ["S3_BUCKET", raw.S3_BUCKET],
+    ["S3_ACCESS_KEY_ID", raw.S3_ACCESS_KEY_ID],
+    ["S3_SECRET_ACCESS_KEY", raw.S3_SECRET_ACCESS_KEY]
+  ]
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+
+  if (missingS3Fields.length > 0) {
+    console.error("NebulaIM Web Bridge S3 configuration error:");
+    console.error(`Missing required values for MEDIA_STORAGE_DRIVER=s3: ${missingS3Fields.join(", ")}`);
+    process.exit(1);
+  }
+}
+
+const mediaPublicBaseUrl = raw.MEDIA_PUBLIC_BASE_URL || (raw.MEDIA_STORAGE_DRIVER === "s3" ? "/media" : "/uploads");
 
 export const config = {
   bridgeHost: raw.BRIDGE_HOST,
@@ -73,7 +112,16 @@ export const config = {
   jsonBodyLimit: raw.JSON_BODY_LIMIT,
   protoDir: path.resolve(process.cwd(), raw.PROTO_DIR),
   webStaticDir: raw.WEB_STATIC_DIR ? path.resolve(process.cwd(), raw.WEB_STATIC_DIR) : "",
+  mediaStorageDriver: raw.MEDIA_STORAGE_DRIVER,
+  mediaPublicBaseUrl,
   uploadDir: path.resolve(process.cwd(), raw.UPLOAD_DIR),
+  s3Endpoint: raw.S3_ENDPOINT,
+  s3Region: raw.S3_REGION,
+  s3Bucket: raw.S3_BUCKET,
+  s3AccessKeyId: raw.S3_ACCESS_KEY_ID,
+  s3SecretAccessKey: raw.S3_SECRET_ACCESS_KEY,
+  s3ForcePathStyle: raw.S3_FORCE_PATH_STYLE,
+  s3KeyPrefix: raw.S3_KEY_PREFIX.trim().replace(/^\/+|\/+$/g, ""),
   mysqlHost: raw.MYSQL_HOST,
   mysqlPort: raw.MYSQL_PORT,
   mysqlUser: raw.MYSQL_USER,

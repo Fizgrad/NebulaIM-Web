@@ -149,6 +149,7 @@ POST /api/conversations/:conversationId/read
 POST /api/uploads/images
 POST /api/messages/single
 POST /api/messages/group
+GET  /media/<object-key>
 
 GET  /api/presence
 
@@ -158,7 +159,22 @@ POST /api/admin/cleanup
 
 Admin routes require `X-Nebula-Admin-Token`. Do not commit raw AdminService tokens.
 
-Image messages use `POST /api/uploads/images` first. The Bridge stores PNG, JPEG, WebP or GIF files under `UPLOAD_DIR`, serves them from `/uploads/images/...`, and the frontend sends the returned URL as a `contentType: "image"` message. In production, `UPLOAD_DIR` must point outside the replaceable Bridge release directory and be backed up as runtime data. When a user selects an image and also enters text, one send action sends the image message first and then sends the text message; the current protocol does not create a combined image-plus-text payload.
+Image messages use `POST /api/uploads/images` first. Development can keep files under `UPLOAD_DIR` and serve them from `/uploads/...`. Production uses MinIO through the S3-compatible Bridge storage adapter, stores objects in the `nebulaim-media` bucket, and serves returned URLs from `/media/...`. The frontend sends the returned URL as a `contentType: "image"` message. When a user selects an image and also enters text, one send action sends the image message first and then sends the text message; the current protocol does not create a combined image-plus-text payload.
+
+### Production Media Storage
+
+Production deploys are prepared by `deploy/setup-minio-media.sh`:
+
+```text
+MinIO data directory: /opt/nebulaim-data/minio
+MinIO API:            http://127.0.0.1:19000
+MinIO container:      nebulaim-minio
+Bucket:               nebulaim-media
+Bridge storage:       MEDIA_STORAGE_DRIVER=s3
+Public media path:    /media
+```
+
+GitHub Actions calls this script during deployment. The script starts the MinIO container, creates the bucket, generates missing S3 credentials in `/opt/nebulaim-web/bridge.env`, and leaves credentials out of git. The existing `/uploads` route remains available for local files that were already written before the MinIO migration.
 
 ## 中文
 
@@ -307,6 +323,7 @@ POST /api/conversations/:conversationId/read
 POST /api/uploads/images
 POST /api/messages/single
 POST /api/messages/group
+GET  /media/<object-key>
 
 GET  /api/presence
 
@@ -316,4 +333,19 @@ POST /api/admin/cleanup
 
 Admin 路由需要 `X-Nebula-Admin-Token`。不要提交明文 AdminService token。
 
-图片消息会先调用 `POST /api/uploads/images`。Bridge 将 PNG、JPEG、WebP 或 GIF 保存到 `UPLOAD_DIR`，通过 `/uploads/images/...` 访问，前端再把返回的 URL 作为 `contentType: "image"` 消息发送。生产环境的 `UPLOAD_DIR` 必须放在可替换 Bridge release 目录之外，并作为运行数据备份。当用户选择图片并输入文字时，一次发送动作会先发送图片消息，再发送文字消息；当前协议不生成图片加文字的复合消息体。
+图片消息会先调用 `POST /api/uploads/images`。开发环境可以继续把文件保存到 `UPLOAD_DIR` 并通过 `/uploads/...` 访问。生产环境通过 Bridge 的 S3 兼容存储适配器上传到 MinIO，图片对象保存在 `nebulaim-media` bucket 中，并通过 `/media/...` 返回给前端。前端再把返回的 URL 作为 `contentType: "image"` 消息发送。当用户选择图片并输入文字时，一次发送动作会先发送图片消息，再发送文字消息；当前协议不生成图片加文字的复合消息体。
+
+### 生产媒体存储
+
+生产部署由 `deploy/setup-minio-media.sh` 准备媒体存储：
+
+```text
+MinIO 数据目录： /opt/nebulaim-data/minio
+MinIO API：      http://127.0.0.1:19000
+MinIO 容器：     nebulaim-minio
+Bucket：         nebulaim-media
+Bridge 存储：    MEDIA_STORAGE_DRIVER=s3
+媒体访问路径：   /media
+```
+
+GitHub Actions 部署时会调用这个脚本。脚本会启动 MinIO 容器、创建 bucket、在 `/opt/nebulaim-web/bridge.env` 中生成缺失的 S3 凭据，并且不会把凭据写入 git。已有的 `/uploads` 路由会继续保留，用来访问迁移到 MinIO 前仍存在的本地文件。

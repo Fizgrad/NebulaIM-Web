@@ -9,6 +9,7 @@ import { createAdminRouter } from "./adminRoutes.js";
 import { createAuthRouter } from "./authRoutes.js";
 import { createConversationRouter } from "./conversationRoutes.js";
 import { createMessageRouter } from "./messageRoutes.js";
+import { createMediaRouter } from "./mediaRoutes.js";
 import { createPresenceRouter } from "./presenceRoutes.js";
 import { createRelationRouter } from "./relationRoutes.js";
 import { createUploadRouter } from "./uploadRoutes.js";
@@ -45,6 +46,10 @@ export function createHttpServer(config: BridgeConfig): http.Server {
   app.use("/api/presence", createPresenceRouter());
   app.use("/api/uploads", createUploadRouter());
   app.use("/api/admin", createAdminRouter());
+
+  if (config.mediaStorageDriver === "s3") {
+    app.use("/media", createMediaRouter());
+  }
 
   app.use(
     "/uploads",

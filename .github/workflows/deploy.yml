@@ -64,7 +64,7 @@ jobs:
           cp -a bridge/dist/. release/bridge/dist/
           cp bridge/package.json bridge/package-lock.json release/bridge/
           cp -a proto/. release/proto/
-          cp deploy/production.env.example deploy/nebulaim-web-bridge.service release/deploy/
+          cp -a deploy/. release/deploy/
           printf '%s\n' "${GITHUB_SHA}" > release/REVISION
 
           tar -czf nebulaim-web-release.tar.gz -C release .
@@ -165,7 +165,7 @@ jobs:
 
             echo "Deployment failed after swap. Restoring previous release..." >&2
             ${SUDO} systemctl stop "${DEPLOY_SERVICE}" >/dev/null 2>&1 || true
-            ${SUDO} rm -rf "${DEPLOY_PATH}/web" "${DEPLOY_PATH}/bridge" "${DEPLOY_PATH}/proto"
+            ${SUDO} rm -rf "${DEPLOY_PATH}/web" "${DEPLOY_PATH}/bridge" "${DEPLOY_PATH}/proto" "${DEPLOY_PATH}/deploy"
 
             if [ -d "${DEPLOY_PATH}/web.prev" ]; then
               ${SUDO} mv "${DEPLOY_PATH}/web.prev" "${DEPLOY_PATH}/web"
@@ -175,6 +175,9 @@ jobs:
             fi
             if [ -d "${DEPLOY_PATH}/proto.prev" ]; then
               ${SUDO} mv "${DEPLOY_PATH}/proto.prev" "${DEPLOY_PATH}/proto"
+            fi
+            if [ -d "${DEPLOY_PATH}/deploy.prev" ]; then
+              ${SUDO} mv "${DEPLOY_PATH}/deploy.prev" "${DEPLOY_PATH}/deploy"
             fi
 
             ${SUDO} systemctl restart "${DEPLOY_SERVICE}" >/dev/null 2>&1 || true
@@ -186,11 +189,12 @@ jobs:
 
           tar -xzf "${RELEASE_FILE}" -C "${tmp_dir}"
 
-          ${SUDO} mkdir -p "${DEPLOY_PATH}" "${stage_dir}/web" "${stage_dir}/bridge" "${stage_dir}/proto"
+          ${SUDO} mkdir -p "${DEPLOY_PATH}" "${stage_dir}/web" "${stage_dir}/bridge" "${stage_dir}/proto" "${stage_dir}/deploy"
           ${SUDO} cp -a "${tmp_dir}/web/." "${stage_dir}/web/"
           ${SUDO} cp -a "${tmp_dir}/bridge/dist" "${stage_dir}/bridge/"
           ${SUDO} cp "${tmp_dir}/bridge/package.json" "${tmp_dir}/bridge/package-lock.json" "${stage_dir}/bridge/"
           ${SUDO} cp -a "${tmp_dir}/proto/." "${stage_dir}/proto/"
+          ${SUDO} cp -a "${tmp_dir}/deploy/." "${stage_dir}/deploy/"
           ${SUDO} cp "${tmp_dir}/REVISION" "${stage_dir}/REVISION"
 
           if [ ! -f "${DEPLOY_PATH}/bridge.env" ]; then
@@ -218,6 +222,8 @@ jobs:
             printf 'UPLOAD_DIR=%s\n' "${upload_dir}" | ${SUDO} tee -a "${env_file}" >/dev/null
           fi
 
+          ${SUDO} bash "${tmp_dir}/deploy/setup-minio-media.sh" "${env_file}"
+
           ${SUDO} cp "${tmp_dir}/deploy/nebulaim-web-bridge.service" "/etc/systemd/system/${DEPLOY_SERVICE}"
           ${SUDO} systemctl daemon-reload
 
@@ -233,7 +239,7 @@ jobs:
           cd "${stage_dir}/bridge"
           ${SUDO} "${npm_bin}" ci --omit=dev --no-audit --no-fund
 
-          ${SUDO} rm -rf "${DEPLOY_PATH}/web.prev" "${DEPLOY_PATH}/bridge.prev" "${DEPLOY_PATH}/proto.prev"
+          ${SUDO} rm -rf "${DEPLOY_PATH}/web.prev" "${DEPLOY_PATH}/bridge.prev" "${DEPLOY_PATH}/proto.prev" "${DEPLOY_PATH}/deploy.prev"
           if [ -d "${DEPLOY_PATH}/web" ]; then
             ${SUDO} mv "${DEPLOY_PATH}/web" "${DEPLOY_PATH}/web.prev"
           fi
@@ -243,16 +249,20 @@ jobs:
           if [ -d "${DEPLOY_PATH}/proto" ]; then
             ${SUDO} mv "${DEPLOY_PATH}/proto" "${DEPLOY_PATH}/proto.prev"
           fi
+          if [ -d "${DEPLOY_PATH}/deploy" ]; then
+            ${SUDO} mv "${DEPLOY_PATH}/deploy" "${DEPLOY_PATH}/deploy.prev"
+          fi
 
           ${SUDO} mv "${stage_dir}/web" "${DEPLOY_PATH}/web"
           ${SUDO} mv "${stage_dir}/bridge" "${DEPLOY_PATH}/bridge"
           ${SUDO} mv "${stage_dir}/proto" "${DEPLOY_PATH}/proto"
+          ${SUDO} mv "${stage_dir}/deploy" "${DEPLOY_PATH}/deploy"
           ${SUDO} rm -rf "${stage_dir}"
           swapped="1"
 
           ${SUDO} systemctl restart "${DEPLOY_SERVICE}"
           ${SUDO} systemctl is-active --quiet "${DEPLOY_SERVICE}"
 
-          ${SUDO} rm -rf "${DEPLOY_PATH}/web.prev" "${DEPLOY_PATH}/bridge.prev" "${DEPLOY_PATH}/proto.prev"
+          ${SUDO} rm -rf "${DEPLOY_PATH}/web.prev" "${DEPLOY_PATH}/bridge.prev" "${DEPLOY_PATH}/proto.prev" "${DEPLOY_PATH}/deploy.prev"
           swapped="0"
           REMOTE
