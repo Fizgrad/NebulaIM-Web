@@ -8,8 +8,10 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
+import { internalMetadata } from "./grpcMetadata.js";
 import { getMysqlPool, hasMysqlConfig } from "./mysqlPool.js";
 import { markMessageConversationRead } from "./messageRoutes.js";
+import { authUserId } from "./authMiddleware.js";
 
 type CommonResponse = {
   code: number;
@@ -51,6 +53,7 @@ type UnreadCountRow = RowDataPacket & {
 
 type ConversationUnary<TResponse> = (
   request: Record<string, unknown>,
+  metadata: grpc.Metadata,
   options: grpc.CallOptions,
   callback: (error: grpc.ServiceError | null, response: TResponse) => void
 ) => void;
@@ -75,16 +78,11 @@ type ConversationServiceConstructor = new (address: string, credentials: grpc.Ch
 const numericIdSchema = z.string().regex(/^\d+$/, "ID must be numeric.");
 
 const listSchema = z.object({
-  userId: numericIdSchema,
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50)
 });
 
-const conversationActionSchema = z.object({
-  userId: numericIdSchema
-});
-
-const flagSchema = conversationActionSchema.extend({
+const flagSchema = z.object({
   value: z.boolean()
 });
 
@@ -95,6 +93,7 @@ export function createConversationRouter(): Router {
 
   router.get("/", async (req, res) => {
     const parsed = listSchema.safeParse(req.query);
+    const userId = authUserId(req);
     if (!parsed.success) {
       sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid list conversations payload.");
       return;
@@ -103,7 +102,7 @@ export function createConversationRouter(): Router {
     try {
       const response = await invokeConversation<ListConversationsResponse>("ListConversations", {
         requestId: requestId(req),
-        userId: Number(parsed.data.userId),
+        userId: Number(userId),
         page: {
           page: parsed.data.page,
           pageSize: parsed.data.pageSize
@@ -115,7 +114,7 @@ export function createConversationRouter(): Router {
         return;
       }
 
-      const conversations = await enrichConversations(response.conversations ?? [], parsed.data.userId);
+      const conversations = await enrichConversations(response.conversations ?? [], userId);
       res.json({ ok: true, conversations, response: response.response });
     } catch (error) {
       sendRpcError(res, "ConversationService.ListConversations failed.", error);
@@ -136,7 +135,7 @@ export function createConversationRouter(): Router {
       sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid pin payload.");
       return;
     }
-    await handleConversationAction(req, res, "PinConversation", { pinned: parsed.data.value }, parsed.data.userId);
+    await handleConversationAction(req, res, "PinConversation", { pinned: parsed.data.value });
   });
 
   router.post("/:conversationId/mute", async (req, res) => {
@@ -145,7 +144,7 @@ export function createConversationRouter(): Router {
       sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid mute payload.");
       return;
     }
-    await handleConversationAction(req, res, "MuteConversation", { muted: parsed.data.value }, parsed.data.userId);
+    await handleConversationAction(req, res, "MuteConversation", { muted: parsed.data.value });
   });
 
   return router;
@@ -153,21 +152,21 @@ export function createConversationRouter(): Router {
 
 async function handleMarkConversationRead(req: express.Request, res: express.Response) {
   const parsedConversation = numericIdSchema.safeParse(req.params.conversationId);
-  const parsedBody = conversationActionSchema.safeParse(req.body);
-  if (!parsedConversation.success || !parsedBody.success) {
-    sendValidationError(res, "User ID and conversation ID must be numeric.");
+  const userId = authUserId(req);
+  if (!parsedConversation.success) {
+    sendValidationError(res, "Conversation ID must be numeric.");
     return;
   }
 
   try {
-    const response = await markMessageConversationRead(parsedBody.data.userId, parsedConversation.data, requestId(req));
+    const response = await markMessageConversationRead(userId, parsedConversation.data, requestId(req));
 
     if (!isOk(response)) {
       sendConversationError(res, response);
       return;
     }
 
-    await persistConversationRead(parsedBody.data.userId, parsedConversation.data);
+    await persistConversationRead(userId, parsedConversation.data);
     res.json({ ok: true, response });
   } catch (error) {
     sendRpcError(res, "MessageService.MarkConversationRead failed.", error);
@@ -202,20 +201,19 @@ async function handleConversationAction(
   req: express.Request,
   res: express.Response,
   method: Exclude<ConversationMethod, "ListConversations">,
-  extra: Record<string, unknown>,
-  parsedUserId?: string
+  extra: Record<string, unknown>
 ) {
   const parsedConversation = numericIdSchema.safeParse(req.params.conversationId);
-  const parsedBody = parsedUserId ? { success: true as const, data: { userId: parsedUserId } } : conversationActionSchema.safeParse(req.body);
-  if (!parsedConversation.success || !parsedBody.success) {
-    sendValidationError(res, "User ID and conversation ID must be numeric.");
+  const userId = authUserId(req);
+  if (!parsedConversation.success) {
+    sendValidationError(res, "Conversation ID must be numeric.");
     return;
   }
 
   try {
     const response = await invokeConversation<CommonResponse>(method, {
       requestId: requestId(req),
-      userId: Number(parsedBody.data.userId),
+      userId: Number(userId),
       conversationId: Number(parsedConversation.data),
       ...extra
     });
@@ -303,7 +301,7 @@ async function calculateUnreadCounts(conversations: ConversationInfo[], userId: 
 
 function invokeConversation<TResponse>(method: ConversationMethod, request: Record<string, unknown>) {
   return new Promise<TResponse>((resolve, reject) => {
-    getConversationClient()[method](request, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
+    getConversationClient()[method](request, internalMetadata(), { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
       if (error) reject(error);
       else resolve(response as TResponse);
     });

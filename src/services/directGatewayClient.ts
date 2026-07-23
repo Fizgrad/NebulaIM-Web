@@ -13,6 +13,7 @@ import type { Message, MessageContentType } from "../types/message";
 import { BrowserPacketCodec } from "./browserPacketCodec";
 import { decodeProto, encodeProto } from "./browserProtoRegistry";
 import { clientLogger } from "./clientLogger";
+import { currentDeviceId } from "./deviceIdentity";
 
 const MessageType = {
   LOGIN_REQ: 1001,
@@ -200,7 +201,7 @@ export class DirectGatewayClient implements GatewayClient {
         requestId: this.requestId("login"),
         username,
         password,
-        deviceId: this.deviceId(),
+        deviceId: currentDeviceId(),
         platform: "web",
         deviceName: "NebulaIM Web"
       },
@@ -502,16 +503,6 @@ export class DirectGatewayClient implements GatewayClient {
 
   private requestId(prefix: string) {
     return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
-
-  private deviceId() {
-    const key = "nebulaim-device-id";
-    let value = window.localStorage.getItem(key);
-    if (!value) {
-      value = `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      window.localStorage.setItem(key, value);
-    }
-    return value;
   }
 
   private emitStatus(status: Omit<GatewayStatus, "gatewayUrl">): void {

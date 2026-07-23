@@ -8,11 +8,13 @@ import type { BridgeConfig } from "../config.js";
 import { createAdminRouter } from "./adminRoutes.js";
 import { createAuthRouter } from "./authRoutes.js";
 import { createConversationRouter } from "./conversationRoutes.js";
+import { createDeviceRouter } from "./deviceRoutes.js";
 import { createMessageRouter } from "./messageRoutes.js";
 import { createMediaRouter } from "./mediaRoutes.js";
 import { createPresenceRouter } from "./presenceRoutes.js";
 import { createRelationRouter } from "./relationRoutes.js";
 import { createUploadRouter } from "./uploadRoutes.js";
+import { requireBridgeAuth } from "./authMiddleware.js";
 
 export function createHttpServer(config: BridgeConfig): http.Server {
   const app = express();
@@ -34,17 +36,21 @@ export function createHttpServer(config: BridgeConfig): http.Server {
       message: `${config.messageServiceHost}:${config.messageServicePort}`,
       relation: `${config.relationServiceHost}:${config.relationServicePort}`,
       conversation: `${config.conversationServiceHost}:${config.conversationServicePort}`,
+      device: `${config.deviceServiceHost}:${config.deviceServicePort}`,
       admin: `${config.adminServiceHost}:${config.adminServicePort}`,
       websocket: "/ws"
     });
   });
 
+  const bridgeAuth = requireBridgeAuth();
+  app.use("/api/auth/users", bridgeAuth);
   app.use("/api/auth", createAuthRouter());
-  app.use("/api/messages", createMessageRouter());
-  app.use("/api/relation", createRelationRouter());
-  app.use("/api/conversations", createConversationRouter());
-  app.use("/api/presence", createPresenceRouter());
-  app.use("/api/uploads", createUploadRouter());
+  app.use("/api/messages", bridgeAuth, createMessageRouter());
+  app.use("/api/relation", bridgeAuth, createRelationRouter());
+  app.use("/api/conversations", bridgeAuth, createConversationRouter());
+  app.use("/api/devices", bridgeAuth, createDeviceRouter());
+  app.use("/api/presence", bridgeAuth, createPresenceRouter());
+  app.use("/api/uploads", bridgeAuth, createUploadRouter());
   app.use("/api/admin", createAdminRouter());
 
   if (config.mediaStorageDriver === "s3") {

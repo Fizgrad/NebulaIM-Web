@@ -30,6 +30,9 @@ type MessagesByConversationId = Record<string, Message[]>;
 
 const resolvedUsers = new Map<string, User>();
 const resolvedGroups = new Map<string, Group>();
+const clientSequenceStorageKey = "nebulaim-client-sequence";
+const maxClientSequence = 4_294_967_295;
+let clientSequence = initialClientSequence();
 
 function tr(key: TranslationKey) {
   return translate(useSettingsStore.getState().language, key);
@@ -64,6 +67,26 @@ function sortConversations(conversations: Conversation[]) {
 
 function isNumericId(value?: string): value is string {
   return Boolean(value && /^\d+$/.test(value));
+}
+
+function initialClientSequence() {
+  try {
+    const stored = Number(window.localStorage.getItem(clientSequenceStorageKey) ?? 0);
+    if (Number.isInteger(stored) && stored > 0 && stored <= maxClientSequence) return stored;
+  } catch {
+    // Ignore storage errors and fall back to a time-derived starting point.
+  }
+  return Date.now() % maxClientSequence;
+}
+
+function nextClientSequenceId() {
+  clientSequence = (clientSequence % maxClientSequence) + 1;
+  try {
+    window.localStorage.setItem(clientSequenceStorageKey, String(clientSequence));
+  } catch {
+    // A volatile sequence is still better than reusing Date.now() for every send.
+  }
+  return clientSequence;
 }
 
 function directConversationId(userId: string) {
@@ -225,7 +248,7 @@ function messagePreview(content: string, contentType: MessageContentType) {
 function isImageUrl(value: string) {
   try {
     const url = new URL(value, "http://nebulaim.local");
-    return /\/uploads\/images\/[^/]+\.(png|jpe?g|webp|gif)$/i.test(url.pathname);
+    return /\/(?:uploads|media)\/images\/[^/]+\.(png|jpe?g|webp|gif)$/i.test(url.pathname);
   } catch {
     return false;
   }
@@ -279,7 +302,7 @@ function mergeMessages(existing: Message[], incoming: Message[]) {
 async function deliverMessage(conversation: Conversation, message: Message, updateStatus: (status: MessageStatus) => void) {
   const settings = useSettingsStore.getState();
   const userId = useAuthStore.getState().user?.id;
-  const sequenceId = Date.now() % 1000000;
+  const sequenceId = nextClientSequenceId();
 
   if (!isNumericId(userId)) {
     throw new Error(tr("store.currentUserNumeric"));
@@ -651,6 +674,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
       const existingConversation = state.conversations.find((conversation) => conversation.id === conversationId);
       const isActive = state.activeConversationId === conversationId;
+      const shouldCountUnread = !normalizedMessage.isMine && !isActive;
       let conversations: Conversation[];
       if (existingConversation) {
         conversations = state.conversations.map((conversation) =>
@@ -661,7 +685,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 online: message.groupId ? conversation.online : senderUser ? senderUser.status === "online" : conversation.online ?? false,
                 lastMessage: messagePreview(message.content, message.contentType),
                 lastMessageAt: message.createdAt,
-                unreadCount: isActive ? 0 : conversation.unreadCount + 1
+                unreadCount: shouldCountUnread ? conversation.unreadCount + 1 : conversation.unreadCount
               }
             : conversation
         );
@@ -674,7 +698,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           online: message.groupId ? undefined : senderUser ? senderUser.status === "online" : false,
           lastMessage: messagePreview(message.content, message.contentType),
           lastMessageAt: message.createdAt,
-          unreadCount: isActive ? 0 : 1,
+          unreadCount: shouldCountUnread ? 1 : 0,
           targetUserId: message.groupId ? undefined : message.fromUserId,
           groupId: message.groupId
         };
@@ -733,6 +757,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       } catch (error) {
         clientLogger.warn("Ack incoming message failed", error);
       }
+    }
+    if (!message.isMine && get().activeConversationId === conversationId) {
+      await get().markConversationRead(conversationId).catch((error) => {
+        clientLogger.warn("Mark active incoming conversation read failed", error);
+      });
     }
 
     void get()

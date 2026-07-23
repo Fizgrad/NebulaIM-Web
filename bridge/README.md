@@ -9,7 +9,7 @@ Browser
   -> HTTP JSON
 NebulaIM Web Bridge :8080
   -> gRPC protobuf
-UserService / RelationService / ConversationService / AdminService
+UserService / RelationService / ConversationService / DeviceService / AdminService
 MessageService
 
 Browser
@@ -44,14 +44,20 @@ MESSAGE_SERVICE_PORT=50052
 CONVERSATION_SERVICE_HOST=127.0.0.1
 CONVERSATION_SERVICE_PORT=50056
 
+DEVICE_SERVICE_HOST=127.0.0.1
+DEVICE_SERVICE_PORT=50058
+
 ADMIN_SERVICE_HOST=127.0.0.1
 ADMIN_SERVICE_PORT=50057
+
+INTERNAL_RPC_TOKEN=
 
 CORS_ORIGIN=http://localhost:5173
 LOG_LEVEL=info
 HEARTBEAT_INTERVAL_MS=15000
 GATEWAY_REQUEST_TIMEOUT_MS=5000
 JSON_BODY_LIMIT=8mb
+UPLOAD_RATE_LIMIT_PER_MINUTE=30
 PROTO_DIR=../proto
 WEB_STATIC_DIR=
 
@@ -81,7 +87,9 @@ MYSQL_CONNECTION_LIMIT=5
 
 `MEDIA_STORAGE_DRIVER=s3` uploads images to an S3-compatible store such as MinIO. `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` are required in that mode. The Bridge returns URLs under `MEDIA_PUBLIC_BASE_URL`, which is `/media` in production. The Bridge also serves `/media/...` by reading objects from S3, so the current Nginx reverse proxy can keep forwarding all web traffic to the Bridge.
 
-`MYSQL_*` enables read-only message history loading for opened conversations. The Bridge verifies that `userId` owns the requested conversation before reading from the `messages` table.
+`MYSQL_*` enables read-only message history loading for opened conversations. The Bridge verifies that the authenticated user owns the requested conversation before reading from the `messages` table.
+
+`INTERNAL_RPC_TOKEN` must match the backend `internal_rpc.auth.token` when backend internal gRPC auth is enabled. Leave it empty only when backend internal gRPC auth is disabled.
 
 ## Install
 
@@ -132,6 +140,7 @@ WS  /ws
   "message": "127.0.0.1:50052",
   "relation": "127.0.0.1:50053",
   "conversation": "127.0.0.1:50056",
+  "device": "127.0.0.1:50058",
   "admin": "127.0.0.1:50057",
   "websocket": "/ws"
 }
@@ -147,6 +156,8 @@ GET  /api/auth/users/by-username/:username
 POST /api/auth/refresh
 ```
 
+`GET /api/auth/users/*` requires `Authorization: Bearer <NebulaIM token>`. `POST /api/auth/refresh` uses the current token in the request body because it is the operation that rotates the browser token.
+
 Token refresh request:
 
 ```json
@@ -159,33 +170,27 @@ Token refresh request:
 ## Relation HTTP API
 
 ```text
-GET  /api/relation/friends?userId=<id>
-GET  /api/relation/friend-requests?userId=<id>&incoming=true&status=0
+GET  /api/relation/friends
+GET  /api/relation/friend-requests?incoming=true&status=0
 POST /api/relation/friend-requests
 POST /api/relation/friend-requests/:requestId/accept
 POST /api/relation/friend-requests/:requestId/reject
-DELETE /api/relation/friends/:friendId?userId=<id>
+DELETE /api/relation/friends/:friendId
+GET  /api/relation/groups
+GET  /api/relation/groups/search?q=<name-or-id>
 POST /api/relation/groups
 POST /api/relation/groups/:groupId/join
 POST /api/relation/groups/:groupId/leave
+GET  /api/relation/groups/:groupId
 GET  /api/relation/groups/:groupId/members
 ```
 
-The current frontend creates friendships through the RelationService friend request flow. The Contacts page accepts either a numeric `user_id` or a username; usernames are resolved through UserService before sending the request:
+Relation and group routes require `Authorization: Bearer <NebulaIM token>`. The Bridge uses that token as the acting user. The Contacts page accepts either a numeric `user_id` or a username; usernames are resolved through UserService before sending the request:
 
 ```json
 {
-  "fromUserId": "10001",
   "toUserId": "10002",
   "message": "hello"
-}
-```
-
-Accept and reject use:
-
-```json
-{
-  "userId": "10002"
 }
 ```
 
@@ -194,17 +199,19 @@ The Bridge forwards these calls to `nebula.proto.RelationService` on `RELATION_S
 ## Message HTTP API
 
 ```text
-GET  /api/messages/conversations/:conversationId?userId=<id>&limit=50
+GET  /api/messages/conversations/:conversationId?limit=50
+GET  /api/messages/read-state?messageIds=10001,10002
 POST /api/uploads/images
 POST /api/messages/single
 POST /api/messages/group
 ```
 
+Message and upload routes require `Authorization: Bearer <NebulaIM token>`. The Bridge derives the sender and read-state viewer from the token identity.
+
 Direct message request:
 
 ```json
 {
-  "fromUserId": "10001",
   "toUserId": "10002",
   "contentType": "text",
   "content": "hello",
@@ -216,7 +223,6 @@ Group message request:
 
 ```json
 {
-  "fromUserId": "10001",
   "groupId": "20001",
   "contentType": "text",
   "content": "hello",
@@ -233,7 +239,7 @@ Image upload request:
 }
 ```
 
-The upload response returns an absolute `url`. Send that URL with `contentType: "image"` through `/api/messages/single` or `/api/messages/group`. The Bridge accepts PNG, JPEG, WebP and GIF up to 5 MiB. Image-plus-text sends are represented as two message sends: one image message followed by one text message.
+The upload response returns an absolute `url`. Send that URL with `contentType: "image"` through `/api/messages/single` or `/api/messages/group`. The Bridge accepts PNG, JPEG, WebP and GIF up to 5 MiB and limits each authenticated user to `UPLOAD_RATE_LIMIT_PER_MINUTE` image uploads per minute. Image-plus-text sends are represented as two message sends: one image message followed by one text message.
 
 With `MEDIA_STORAGE_DRIVER=s3`, uploaded objects are stored in MinIO using keys such as `images/2026/07/image_*.png`, and the response URL points to `/media/images/2026/07/...`. With `MEDIA_STORAGE_DRIVER=local`, the response URL points to `/uploads/images/...`.
 
@@ -256,14 +262,24 @@ Conversation history is read from MySQL using `MYSQL_*` because the current Mess
 ## Conversation HTTP API
 
 ```text
-GET    /api/conversations?userId=<id>&page=1&pageSize=50
+GET    /api/conversations?page=1&pageSize=50
 POST   /api/conversations/:conversationId/read
 DELETE /api/conversations/:conversationId
 POST   /api/conversations/:conversationId/pin
 POST   /api/conversations/:conversationId/mute
 ```
 
-The Bridge forwards these calls to `nebula.proto.ConversationService` on `CONVERSATION_SERVICE_HOST:CONVERSATION_SERVICE_PORT`.
+Conversation routes require `Authorization: Bearer <NebulaIM token>`. The Bridge forwards these calls to `nebula.proto.ConversationService` on `CONVERSATION_SERVICE_HOST:CONVERSATION_SERVICE_PORT`.
+
+## Device HTTP API
+
+```text
+GET  /api/devices
+POST /api/devices/:deviceId/kick
+POST /api/devices/kick-all
+```
+
+Device routes require `Authorization: Bearer <NebulaIM token>`. The Bridge forwards these calls to `nebula.proto.DeviceService` on `DEVICE_SERVICE_HOST:DEVICE_SERVICE_PORT`. The settings page uses these endpoints to show signed-in devices and revoke one or all devices.
 
 ## Admin HTTP API
 
@@ -272,6 +288,8 @@ GET  /api/admin/health
 GET  /api/admin/system-stats
 GET  /api/admin/outbox-stats
 GET  /api/admin/kafka-lag
+GET  /api/admin/service-overview
+GET  /api/admin/audit-events?limit=20
 POST /api/admin/cleanup
 ```
 
@@ -320,7 +338,7 @@ src/services/directGatewayClient.ts
 ## Gateway Integration Checklist
 
 1. Start NebulaIM dependencies.
-2. Start UserService, RelationService, ConversationService, MessageService, PushService, AdminService and Gateway.
+2. Start UserService, RelationService, ConversationService, MessageService, DeviceService, PushService, AdminService and Gateway.
 3. Confirm Gateway listens at `GATEWAY_TCP_HOST:GATEWAY_TCP_PORT`, normally `127.0.0.1:9000`.
 4. Confirm Bridge listens at `BRIDGE_HOST:BRIDGE_PORT`, normally `0.0.0.0:8080`.
 5. Confirm `/health` and `/info` return OK and `/info.websocket` is `/ws`.
@@ -335,6 +353,7 @@ src/services/directGatewayClient.ts
 - `USER_SERVICE_UNAVAILABLE`: UserService is not reachable at `USER_SERVICE_HOST:USER_SERVICE_PORT`.
 - `RELATION_SERVICE_UNAVAILABLE`: RelationService is not reachable at `RELATION_SERVICE_HOST:RELATION_SERVICE_PORT`.
 - `CONVERSATION_SERVICE_UNAVAILABLE`: ConversationService is not reachable at `CONVERSATION_SERVICE_HOST:CONVERSATION_SERVICE_PORT`.
+- `DEVICE_SERVICE_UNAVAILABLE`: DeviceService is not reachable at `DEVICE_SERVICE_HOST:DEVICE_SERVICE_PORT`.
 - `/ws` returns `502 Bad Gateway`: Gateway is not reachable at `GATEWAY_TCP_HOST:GATEWAY_TCP_PORT`.
 - `ADMIN_TOKEN_REQUIRED`: `/api/admin/*` request did not include `X-Nebula-Admin-Token`.
 - `admin permission denied`: token exists but lacks the required scope.

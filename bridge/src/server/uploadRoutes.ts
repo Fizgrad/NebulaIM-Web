@@ -5,6 +5,7 @@ import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
 import { mediaKey, writeMediaObject } from "./mediaStorage.js";
+import { authUserId } from "./authMiddleware.js";
 
 const maxImageBytes = 5 * 1024 * 1024;
 const maxDataUrlLength = Math.ceil(maxImageBytes * 1.4) + 128;
@@ -21,10 +22,24 @@ const uploadImageSchema = z.object({
   fileName: z.string().trim().max(180).optional()
 });
 
+const uploadWindows = new Map<string, { windowStartedAt: number; count: number }>();
+
 export function createUploadRouter(): Router {
   const router = express.Router();
 
   router.post("/images", async (req, res) => {
+    const userId = authUserId(req);
+    if (!allowUpload(userId)) {
+      res.status(429).json({
+        ok: false,
+        error: {
+          code: "UPLOAD_RATE_LIMITED",
+          message: "Too many image uploads."
+        }
+      });
+      return;
+    }
+
     const parsed = uploadImageSchema.safeParse(req.body);
     if (!parsed.success) {
       sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid image upload payload.");
@@ -73,6 +88,26 @@ export function createUploadRouter(): Router {
   });
 
   return router;
+}
+
+function allowUpload(userId: string) {
+  const now = Date.now();
+  const windowMs = 60_000;
+  const current = uploadWindows.get(userId);
+  if (!current || now - current.windowStartedAt >= windowMs) {
+    uploadWindows.set(userId, { windowStartedAt: now, count: 1 });
+    pruneUploadWindows(now, windowMs);
+    return true;
+  }
+  if (current.count >= config.uploadRateLimitPerMinute) return false;
+  current.count += 1;
+  return true;
+}
+
+function pruneUploadWindows(now: number, windowMs: number) {
+  for (const [userId, item] of uploadWindows) {
+    if (now - item.windowStartedAt >= windowMs * 2) uploadWindows.delete(userId);
+  }
 }
 
 function parseDataUrl(dataUrl: string): { mimeType: keyof typeof allowedImages; buffer: Buffer } | null {

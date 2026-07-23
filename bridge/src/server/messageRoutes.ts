@@ -8,7 +8,9 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
+import { internalMetadata } from "./grpcMetadata.js";
 import { getMysqlPool } from "./mysqlPool.js";
+import { authUserId } from "./authMiddleware.js";
 
 type CommonResponse = {
   code: number;
@@ -24,6 +26,7 @@ type SendMessageResponse = {
 
 type MessageUnary<TResponse> = (
   request: Record<string, unknown>,
+  metadata: grpc.Metadata,
   options: grpc.CallOptions,
   callback: (error: grpc.ServiceError | null, response: TResponse) => void
 ) => void;
@@ -53,8 +56,8 @@ type GetMessageReadStateResponse = {
 type MessageServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => MessageGrpcClient;
 
 const numericIdSchema = z.string().regex(/^\d+$/, "ID must be numeric.");
+const maxUint32 = 4_294_967_295;
 const historyQuerySchema = z.object({
-  userId: numericIdSchema,
   before: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50)
 });
@@ -72,19 +75,17 @@ const readStateQuerySchema = z.object({
 });
 
 const sendSingleSchema = z.object({
-  fromUserId: numericIdSchema,
   toUserId: numericIdSchema,
   contentType: z.enum(["text", "image", "MESSAGE_CONTENT_TYPE_TEXT", "MESSAGE_CONTENT_TYPE_IMAGE"]).optional().default("text"),
   content: z.string().trim().min(1, "Message content is required.").max(4096, "Message content is too long."),
-  clientSequenceId: z.coerce.number().int().min(0).max(999999).optional().default(0)
+  clientSequenceId: z.coerce.number().int().min(0).max(maxUint32).optional().default(0)
 });
 
 const sendGroupSchema = z.object({
-  fromUserId: numericIdSchema,
   groupId: numericIdSchema,
   contentType: z.enum(["text", "image", "MESSAGE_CONTENT_TYPE_TEXT", "MESSAGE_CONTENT_TYPE_IMAGE"]).optional().default("text"),
   content: z.string().trim().min(1, "Message content is required.").max(4096, "Message content is too long."),
-  clientSequenceId: z.coerce.number().int().min(0).max(999999).optional().default(0)
+  clientSequenceId: z.coerce.number().int().min(0).max(maxUint32).optional().default(0)
 });
 
 let cachedClient: MessageGrpcClient | null = null;
@@ -103,12 +104,17 @@ type MessageRow = RowDataPacket & {
   created_at: string;
 };
 
+type AuthorizedMessageRow = RowDataPacket & {
+  message_id: string | number;
+};
+
 export function createMessageRouter(): Router {
   const router = express.Router();
 
   router.get("/conversations/:conversationId", async (req, res) => {
     const parsed = historyQuerySchema.safeParse(req.query);
     const conversationId = String(req.params.conversationId ?? "");
+    const userId = authUserId(req);
     if (!numericIdSchema.safeParse(conversationId).success || !parsed.success) {
       sendValidationError(res, parsed.success ? "Conversation ID must be numeric." : parsed.error.issues[0]?.message ?? "Invalid message history query.");
       return;
@@ -118,7 +124,7 @@ export function createMessageRouter(): Router {
       const pool = getMysqlPool();
       const [conversationRows] = await pool.execute<RowDataPacket[]>(
         "SELECT conversation_id FROM conversations WHERE conversation_id = ? AND owner_user_id = ? AND deleted = 0 LIMIT 1",
-        [conversationId, parsed.data.userId]
+        [conversationId, userId]
       );
       if (conversationRows.length === 0) {
         res.status(404).json({
@@ -153,6 +159,7 @@ export function createMessageRouter(): Router {
 
   router.post("/single", async (req, res) => {
     const parsed = sendSingleSchema.safeParse(req.body);
+    const fromUserId = authUserId(req);
     if (!parsed.success) {
       sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid message payload.");
       return;
@@ -161,7 +168,7 @@ export function createMessageRouter(): Router {
     try {
       const response = await invokeMessage<SendMessageResponse>("SendSingleMessage", {
         requestId: requestId(req, "send_single_req"),
-        fromUserId: Number(parsed.data.fromUserId),
+        fromUserId: Number(fromUserId),
         toUserId: Number(parsed.data.toUserId),
         contentType: toProtoContentType(parsed.data.contentType),
         content: parsed.data.content,
@@ -186,6 +193,7 @@ export function createMessageRouter(): Router {
 
   router.post("/group", async (req, res) => {
     const parsed = sendGroupSchema.safeParse(req.body);
+    const fromUserId = authUserId(req);
     if (!parsed.success) {
       sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid group message payload.");
       return;
@@ -194,7 +202,7 @@ export function createMessageRouter(): Router {
     try {
       const response = await invokeMessage<SendMessageResponse>("SendGroupMessage", {
         requestId: requestId(req, "send_group_req"),
-        fromUserId: Number(parsed.data.fromUserId),
+        fromUserId: Number(fromUserId),
         groupId: Number(parsed.data.groupId),
         contentType: toProtoContentType(parsed.data.contentType),
         content: parsed.data.content,
@@ -219,13 +227,26 @@ export function createMessageRouter(): Router {
 
   router.get("/read-state", async (req, res) => {
     const parsed = readStateQuerySchema.safeParse(req.query);
+    const userId = authUserId(req);
     if (!parsed.success) {
       sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid read-state query.");
       return;
     }
 
+    let authorizedMessageIds: Set<string>;
+    try {
+      authorizedMessageIds = await listAuthorizedReadStateMessageIds(userId, parsed.data.messageIds);
+    } catch (error) {
+      sendReadStateError(res, error);
+      return;
+    }
+
     const results = await Promise.all(
       parsed.data.messageIds.map(async (messageId) => {
+        if (!authorizedMessageIds.has(messageId)) {
+          return { messageId, states: [] };
+        }
+
         try {
           const response = await invokeMessage<GetMessageReadStateResponse>("GetMessageReadState", {
             requestId: requestId(req, "read_state_req"),
@@ -265,7 +286,7 @@ export async function markMessageConversationRead(userId: string, conversationId
 
 function invokeMessage<TResponse>(method: MessageMethod, request: Record<string, unknown>) {
   return new Promise<TResponse>((resolve, reject) => {
-    getMessageClient()[method](request, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
+    getMessageClient()[method](request, internalMetadata(), { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
       if (error) reject(error);
       else resolve(response as TResponse);
     });
@@ -312,6 +333,21 @@ function toBridgeMessage(row: MessageRow) {
     recalledAt: String(row.recalled_at ?? "0"),
     createdAt: String(row.created_at)
   };
+}
+
+async function listAuthorizedReadStateMessageIds(userId: string, messageIds: string[]) {
+  const uniqueMessageIds = [...new Set(messageIds)];
+  if (uniqueMessageIds.length === 0) return new Set<string>();
+
+  const placeholders = uniqueMessageIds.map(() => "?").join(", ");
+  const [rows] = await getMysqlPool().execute<AuthorizedMessageRow[]>(
+    `SELECT DISTINCT m.message_id
+     FROM messages m
+     INNER JOIN conversations c ON c.conversation_id = m.conversation_id
+     WHERE c.owner_user_id = ? AND c.deleted = 0 AND m.message_id IN (${placeholders})`,
+    [userId, ...uniqueMessageIds]
+  );
+  return new Set(rows.map((row) => String(row.message_id)));
 }
 
 function requestId(req: express.Request, prefix: string) {
@@ -370,22 +406,55 @@ function sendHistoryError(res: express.Response, error: unknown) {
   });
 }
 
+function sendReadStateError(res: express.Response, error: unknown) {
+  logger.warn("Message read-state authorization query failed.", { detail: error });
+  res.status(503).json({
+    ok: false,
+    error: {
+      code: "MESSAGE_READ_STATE_UNAVAILABLE",
+      message: error instanceof Error ? error.message : "Message read state is unavailable."
+    }
+  });
+}
+
 function statusForMessageCode(code: number) {
-  if (code === 1001) return 400;
-  if (code === 1005) return 404;
-  if (code === 1006) return 403;
-  if (code === 3001 || code === 3002 || code === 3003) return 502;
+  if ([1001, 8001, 8002, 8009, 14001, 14003].includes(code)) return 400;
+  if ([3000, 3001, 3007].includes(code)) return 401;
+  if ([8008, 10007, 14002, 7103].includes(code)) return 403;
+  if ([3002, 7101, 8003, 13001].includes(code)) return 404;
+  if (code === 11001) return 429;
+  if ([4000, 5000, 6000, 8005, 8006, 8007, 11002, 16002].includes(code)) return 502;
   return 400;
 }
 
 function messageCodeToString(code: number) {
   const names: Record<number, string> = {
     1001: "INVALID_ARGUMENT",
-    1005: "USER_NOT_FOUND",
-    1006: "PERMISSION_DENIED",
-    3001: "MESSAGE_PERSIST_FAILED",
-    3002: "MESSAGE_KAFKA_FAILED",
-    3003: "MESSAGE_REDIS_FAILED"
+    3000: "AUTH_FAILED",
+    3001: "TOKEN_INVALID",
+    3002: "USER_NOT_FOUND",
+    3007: "TOKEN_EXPIRED",
+    4000: "DB_ERROR",
+    5000: "REDIS_ERROR",
+    6000: "KAFKA_ERROR",
+    7101: "GROUP_NOT_FOUND",
+    7103: "GROUP_NOT_MEMBER",
+    8001: "MESSAGE_EMPTY",
+    8002: "MESSAGE_TOO_LARGE",
+    8003: "MESSAGE_NOT_FOUND",
+    8005: "MESSAGE_PERSIST_FAILED",
+    8006: "MESSAGE_KAFKA_FAILED",
+    8007: "MESSAGE_ACK_FAILED",
+    8008: "MESSAGE_PERMISSION_DENIED",
+    8009: "INVALID_CONVERSATION",
+    10007: "GATEWAY_PERMISSION_DENIED",
+    11001: "RATE_LIMITED",
+    11002: "SERVICE_UNAVAILABLE",
+    13001: "CONVERSATION_NOT_FOUND",
+    14001: "MESSAGE_RECALL_TIMEOUT",
+    14002: "MESSAGE_RECALL_PERMISSION_DENIED",
+    14003: "MESSAGE_ALREADY_RECALLED",
+    16002: "OUTBOX_PUBLISH_FAILED"
   };
   return names[code] ?? `MESSAGE_SERVICE_ERROR_${code}`;
 }

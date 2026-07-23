@@ -1,68 +1,16 @@
 import type { Router } from "express";
 import express from "express";
-import * as grpc from "@grpc/grpc-js";
-import protoLoader from "@grpc/proto-loader";
-import path from "node:path";
 import { z } from "zod";
-import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
-
-type CommonResponse = {
-  code: number;
-  message: string;
-  requestId: string;
-};
-
-type RegisterResponse = {
-  response: CommonResponse;
-  userId: string;
-};
-
-type RefreshTokenResponse = {
-  response: CommonResponse;
-  userId: string;
-  token: string;
-  expireAt: string | number;
-};
-
-type UserInfo = {
-  userId: string;
-  username: string;
-  nickname: string;
-  avatar: string;
-  createdAt: string | number;
-};
-
-type GetUserInfoResponse = {
-  response: CommonResponse;
-  user?: UserInfo;
-};
-
-type UserGrpcClient = grpc.Client & {
-  Register: (
-    request: Record<string, unknown>,
-    options: grpc.CallOptions,
-    callback: (error: grpc.ServiceError | null, response: RegisterResponse) => void
-  ) => void;
-  RefreshToken: (
-    request: Record<string, unknown>,
-    options: grpc.CallOptions,
-    callback: (error: grpc.ServiceError | null, response: RefreshTokenResponse) => void
-  ) => void;
-  GetUserInfo: (
-    request: Record<string, unknown>,
-    options: grpc.CallOptions,
-    callback: (error: grpc.ServiceError | null, response: GetUserInfoResponse) => void
-  ) => void;
-  GetUserByUsername: (
-    request: Record<string, unknown>,
-    options: grpc.CallOptions,
-    callback: (error: grpc.ServiceError | null, response: GetUserInfoResponse) => void
-  ) => void;
-};
-
-type UserServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => UserGrpcClient;
+import {
+  invokeGetUserByUsername,
+  invokeGetUserInfo,
+  invokeRefreshToken,
+  invokeRegister,
+  statusForUserCode,
+  userCodeToString
+} from "./userServiceClient.js";
 
 const registerSchema = z.object({
   username: z.string().trim().min(1, "Username is required."),
@@ -72,13 +20,11 @@ const registerSchema = z.object({
 
 const refreshSchema = z.object({
   token: z.string().min(1, "Token is required."),
-  deviceId: z.string().trim().optional().default("web")
+  deviceId: z.string().trim().min(1, "Device ID is required.")
 });
 
 const userIdSchema = z.string().regex(/^\d+$/, "User ID must be numeric.");
 const usernameParamSchema = z.string().trim().min(1, "Username is required.").max(64, "Username is too long.");
-
-let cachedClient: UserGrpcClient | null = null;
 
 export function createAuthRouter(): Router {
   const router = express.Router();
@@ -281,91 +227,6 @@ export function createAuthRouter(): Router {
   });
 
   return router;
-}
-
-function invokeRegister(request: Record<string, unknown>) {
-  return new Promise<RegisterResponse>((resolve, reject) => {
-    getUserClient().Register(request, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
-      if (error) reject(error);
-      else resolve(response);
-    });
-  });
-}
-
-function invokeRefreshToken(request: Record<string, unknown>) {
-  return new Promise<RefreshTokenResponse>((resolve, reject) => {
-    getUserClient().RefreshToken(request, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
-      if (error) reject(error);
-      else resolve(response);
-    });
-  });
-}
-
-function invokeGetUserInfo(request: Record<string, unknown>) {
-  return new Promise<GetUserInfoResponse>((resolve, reject) => {
-    getUserClient().GetUserInfo(request, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
-      if (error) reject(error);
-      else resolve(response);
-    });
-  });
-}
-
-function invokeGetUserByUsername(request: Record<string, unknown>) {
-  return new Promise<GetUserInfoResponse>((resolve, reject) => {
-    getUserClient().GetUserByUsername(request, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
-      if (error) reject(error);
-      else resolve(response);
-    });
-  });
-}
-
-function getUserClient(): UserGrpcClient {
-  if (cachedClient) return cachedClient;
-
-  const packageDefinition = protoLoader.loadSync(path.join(config.protoDir, "user.proto"), {
-    keepCase: false,
-    longs: String,
-    enums: String,
-    defaults: true,
-    oneofs: true,
-    includeDirs: [config.protoDir]
-  });
-  const loaded = grpc.loadPackageDefinition(packageDefinition);
-  const nebula = loaded.nebula as grpc.GrpcObject | undefined;
-  const proto = nebula?.proto as grpc.GrpcObject | undefined;
-  const UserService = proto?.UserService as UserServiceConstructor | undefined;
-  if (!UserService) {
-    throw new Error("Failed to load nebula.proto.UserService from user.proto.");
-  }
-
-  cachedClient = new UserService(
-    `${config.userServiceHost}:${config.userServicePort}`,
-    grpc.credentials.createInsecure()
-  );
-  return cachedClient;
-}
-
-function statusForUserCode(code: number) {
-  if (code === 3003) return 409;
-  if (code === 3002) return 404;
-  if ([1001, 3004, 3005, 3006].includes(code)) return 400;
-  if ([3001, 3007, 15002].includes(code)) return 401;
-  return 502;
-}
-
-function userCodeToString(code: number) {
-  const names: Record<number, string> = {
-    1001: "INVALID_ARGUMENT",
-    3001: "TOKEN_INVALID",
-    3002: "USER_NOT_FOUND",
-    3003: "USER_ALREADY_EXISTS",
-    3004: "PASSWORD_TOO_SHORT",
-    3005: "USERNAME_EMPTY",
-    3006: "PASSWORD_EMPTY",
-    3007: "TOKEN_EXPIRED",
-    15002: "TOKEN_REFRESH_FAILED"
-  };
-  return names[code] ?? `USER_SERVICE_ERROR_${code}`;
 }
 
 function tokenPrefix(token: string) {

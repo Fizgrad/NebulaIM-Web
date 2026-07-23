@@ -6,6 +6,7 @@ import { getGatewayClient, resetGatewayClient } from "../services/gatewayClient"
 import { useSettingsStore } from "./settingsStore";
 import { normalizeExpireAt, isTokenExpiringSoon } from "../services/authToken";
 import { clientLogger } from "../services/clientLogger";
+import { currentDeviceId } from "../services/deviceIdentity";
 import { translate, type TranslationKey } from "../i18n";
 
 type AuthState = {
@@ -91,7 +92,7 @@ export const useAuthStore = create<AuthState>()(
         if (!token) return false;
         const settings = useSettingsStore.getState();
         try {
-          const response = await refreshBridgeToken(settings.bridgeHttpUrl, token);
+          const response = await refreshBridgeToken(settings.bridgeHttpUrl, token, currentDeviceId());
           set({
             token: response.token,
             tokenExpireAt: normalizeExpireAt(response.expireAt),

@@ -28,10 +28,14 @@ services:
       - MESSAGE_SERVICE_PORT=50052
       - CONVERSATION_SERVICE_HOST=host.docker.internal
       - CONVERSATION_SERVICE_PORT=50056
+      - DEVICE_SERVICE_HOST=host.docker.internal
+      - DEVICE_SERVICE_PORT=50058
       - ADMIN_SERVICE_HOST=host.docker.internal
       - ADMIN_SERVICE_PORT=50057
+      - INTERNAL_RPC_TOKEN=${INTERNAL_RPC_TOKEN:-}
       - CORS_ORIGIN=http://localhost:5173
       - JSON_BODY_LIMIT=8mb
+      - UPLOAD_RATE_LIMIT_PER_MINUTE=30
       - PROTO_DIR=/proto
       - MEDIA_STORAGE_DRIVER=s3
       - MEDIA_PUBLIC_BASE_URL=/media
@@ -39,8 +43,8 @@ services:
       - S3_ENDPOINT=http://nebulaim-minio:9000
       - S3_REGION=us-east-1
       - S3_BUCKET=nebulaim-media
-      - S3_ACCESS_KEY_ID=nebulaim
-      - S3_SECRET_ACCESS_KEY=REDACTED
+      - S3_ACCESS_KEY_ID=${MINIO_ROOT_USER:-nebulaim}
+      - S3_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
       - S3_FORCE_PATH_STYLE=true
     volumes:
       - ./proto:/proto:ro
@@ -56,8 +60,8 @@ services:
       - "19000:9000"
       - "19001:9001"
     environment:
-      - MINIO_ROOT_USER=nebulaim
-      - MINIO_ROOT_PASSWORD=REDACTED
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-nebulaim}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
     volumes:
       - nebulaim_minio_data:/data
 
@@ -67,7 +71,7 @@ services:
       - nebulaim-minio
     entrypoint: ["/bin/sh", "-c"]
     command: >
-      until mc alias set local http://nebulaim-minio:9000 nebulaim REDACTED; do sleep 1; done &&
+      until mc alias set local http://nebulaim-minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 1; done &&
       mc mb --ignore-existing local/nebulaim-media
 
 volumes:

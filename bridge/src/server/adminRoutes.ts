@@ -9,6 +9,16 @@ import { logger } from "../utils/logger.js";
 
 type GrpcCallback<T> = (error: grpc.ServiceError | null, response: T) => void;
 
+type AdminCommonResponse = {
+  code: number;
+  message?: string;
+  requestId?: string;
+};
+
+type AdminResponseEnvelope = {
+  response?: AdminCommonResponse;
+};
+
 type AdminGrpcClient = grpc.Client & {
   HealthCheck: AdminUnaryMethod;
   GetSystemStats: AdminUnaryMethod;
@@ -91,6 +101,11 @@ async function callAdmin(req: express.Request, res: express.Response, method: Ad
 
   try {
     const data = await invokeAdmin(method, { requestId, ...payload }, adminToken, traceId);
+    const common = commonAdminResponse(data);
+    if (common && common.code !== 0) {
+      sendAdminError(res, common);
+      return;
+    }
     res.json({ ok: true, data });
   } catch (error) {
     logger.warn(`Admin RPC failed method=${method}`, { detail: error });
@@ -102,6 +117,41 @@ async function callAdmin(req: express.Request, res: express.Response, method: Ad
       }
     });
   }
+}
+
+function commonAdminResponse(data: unknown) {
+  if (!data || typeof data !== "object") return null;
+  const response = (data as AdminResponseEnvelope).response;
+  if (!response || typeof response.code !== "number") return null;
+  return response;
+}
+
+function sendAdminError(res: express.Response, response: AdminCommonResponse) {
+  res.status(statusForAdminCode(response)).json({
+    ok: false,
+    error: {
+      code: adminCodeToString(response.code),
+      message: response.message || "AdminService rejected the request."
+    }
+  });
+}
+
+function statusForAdminCode(response: AdminCommonResponse) {
+  if (response.code === 3000) {
+    return response.message?.toLowerCase().includes("permission") ? 403 : 401;
+  }
+  if (response.code === 1001) return 400;
+  if (response.code === 11002) return 503;
+  return 502;
+}
+
+function adminCodeToString(code: number) {
+  const names: Record<number, string> = {
+    1001: "INVALID_ARGUMENT",
+    3000: "AUTH_FAILED",
+    11002: "SERVICE_UNAVAILABLE"
+  };
+  return names[code] ?? `ADMIN_SERVICE_ERROR_${code}`;
 }
 
 function invokeAdmin(method: AdminMethod, request: Record<string, unknown>, adminToken: string, traceId: string) {

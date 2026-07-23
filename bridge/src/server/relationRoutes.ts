@@ -8,7 +8,9 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
+import { internalMetadata } from "./grpcMetadata.js";
 import { getMysqlPool, hasMysqlConfig } from "./mysqlPool.js";
+import { authUserId } from "./authMiddleware.js";
 
 type CommonResponse = {
   code: number;
@@ -79,12 +81,12 @@ type GroupRow = RowDataPacket & {
 
 type RelationUnary<TResponse> = (
   request: Record<string, unknown>,
+  metadata: grpc.Metadata,
   options: grpc.CallOptions,
   callback: (error: grpc.ServiceError | null, response: TResponse) => void
 ) => void;
 
 type RelationGrpcClient = grpc.Client & {
-  AddFriend: RelationUnary<CommonResponse>;
   DeleteFriend: RelationUnary<CommonResponse>;
   ListFriends: RelationUnary<ListFriendsResponse>;
   SendFriendRequest: RelationUnary<SendFriendRequestResponse>;
@@ -98,7 +100,6 @@ type RelationGrpcClient = grpc.Client & {
 };
 
 type RelationMethod =
-  | "AddFriend"
   | "DeleteFriend"
   | "ListFriends"
   | "SendFriendRequest"
@@ -114,33 +115,17 @@ type RelationServiceConstructor = new (address: string, credentials: grpc.Channe
 
 const numericIdSchema = z.string().regex(/^\d+$/, "ID must be numeric.");
 
-const userIdQuerySchema = z.object({
-  userId: numericIdSchema
-});
-
-const optionalUserIdQuerySchema = z.object({
-  userId: numericIdSchema.optional()
-});
-
 const searchGroupsQuerySchema = z.object({
   q: z.string().trim().min(1, "Search text is required.").max(128, "Search text is too long."),
-  userId: numericIdSchema.optional(),
   limit: z.coerce.number().int().min(1).max(50).default(12)
 });
 
-const addFriendSchema = z.object({
-  userId: numericIdSchema,
-  friendId: numericIdSchema
-});
-
 const sendFriendRequestSchema = z.object({
-  fromUserId: numericIdSchema,
   toUserId: numericIdSchema,
   message: z.string().trim().max(255, "Request message is too long.").optional().default("")
 });
 
 const listFriendRequestsSchema = z.object({
-  userId: numericIdSchema,
   incoming: z
     .preprocess((value) => {
       if (value === undefined) return true;
@@ -154,17 +139,8 @@ const listFriendRequestsSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(200).default(50)
 });
 
-const friendRequestActionSchema = z.object({
-  userId: numericIdSchema
-});
-
 const createGroupSchema = z.object({
-  ownerId: numericIdSchema,
   name: z.string().trim().min(1, "Group name is required.").max(128, "Group name is too long.")
-});
-
-const userActionSchema = z.object({
-  userId: numericIdSchema
 });
 
 let cachedClient: RelationGrpcClient | null = null;
@@ -173,16 +149,12 @@ export function createRelationRouter(): Router {
   const router = express.Router();
 
   router.get("/friends", async (req, res) => {
-    const parsed = userIdQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid user id.");
-      return;
-    }
+    const userId = authUserId(req);
 
     try {
       const response = await invokeRelation<ListFriendsResponse>("ListFriends", {
         requestId: requestId(req),
-        userId: Number(parsed.data.userId)
+        userId: Number(userId)
       });
 
       if (!isOk(response.response)) {
@@ -198,6 +170,7 @@ export function createRelationRouter(): Router {
 
   router.get("/friend-requests", async (req, res) => {
     const parsed = listFriendRequestsSchema.safeParse(req.query);
+    const userId = authUserId(req);
     if (!parsed.success) {
       sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid friend request query.");
       return;
@@ -206,7 +179,7 @@ export function createRelationRouter(): Router {
     try {
       const response = await invokeRelation<ListFriendRequestsResponse>("ListFriendRequests", {
         requestId: requestId(req),
-        userId: Number(parsed.data.userId),
+        userId: Number(userId),
         incoming: parsed.data.incoming,
         status: parsed.data.status,
         page: {
@@ -228,6 +201,7 @@ export function createRelationRouter(): Router {
 
   router.post("/friend-requests", async (req, res) => {
     const parsed = sendFriendRequestSchema.safeParse(req.body);
+    const fromUserId = authUserId(req);
     if (!parsed.success) {
       sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid friend request payload.");
       return;
@@ -236,7 +210,7 @@ export function createRelationRouter(): Router {
     try {
       const response = await invokeRelation<SendFriendRequestResponse>("SendFriendRequest", {
         requestId: requestId(req),
-        fromUserId: Number(parsed.data.fromUserId),
+        fromUserId: Number(fromUserId),
         toUserId: Number(parsed.data.toUserId),
         message: parsed.data.message
       });
@@ -260,43 +234,18 @@ export function createRelationRouter(): Router {
     await handleFriendRequestAction(req, res, "RejectFriendRequest");
   });
 
-  router.post("/friends", async (req, res) => {
-    const parsed = addFriendSchema.safeParse(req.body);
-    if (!parsed.success) {
-      sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid add friend payload.");
-      return;
-    }
-
-    try {
-      const response = await invokeRelation<CommonResponse>("AddFriend", {
-        requestId: requestId(req),
-        userId: Number(parsed.data.userId),
-        friendId: Number(parsed.data.friendId)
-      });
-
-      if (!isOk(response)) {
-        sendRelationError(res, response);
-        return;
-      }
-
-      res.json({ ok: true, response });
-    } catch (error) {
-      sendRpcError(res, "RelationService.AddFriend failed.", error);
-    }
-  });
-
   router.delete("/friends/:friendId", async (req, res) => {
-    const parsedUser = userIdQuerySchema.safeParse(req.query);
     const parsedFriend = numericIdSchema.safeParse(req.params.friendId);
-    if (!parsedUser.success || !parsedFriend.success) {
-      sendValidationError(res, "User ID and friend ID must be numeric.");
+    const userId = authUserId(req);
+    if (!parsedFriend.success) {
+      sendValidationError(res, "Friend ID must be numeric.");
       return;
     }
 
     try {
       const response = await invokeRelation<CommonResponse>("DeleteFriend", {
         requestId: requestId(req),
-        userId: Number(parsedUser.data.userId),
+        userId: Number(userId),
         friendId: Number(parsedFriend.data)
       });
 
@@ -312,18 +261,10 @@ export function createRelationRouter(): Router {
   });
 
   router.get("/groups", async (req, res) => {
-    const parsed = optionalUserIdQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid group query.");
-      return;
-    }
-    if (!parsed.data.userId) {
-      sendValidationError(res, "User ID is required to list groups.");
-      return;
-    }
+    const userId = authUserId(req);
 
     try {
-      const groups = await listGroupsForUser(parsed.data.userId);
+      const groups = await listGroupsForUser(userId);
       res.json({ ok: true, groups });
     } catch (error) {
       sendGroupLookupError(res, "Group list is unavailable.", error);
@@ -347,6 +288,7 @@ export function createRelationRouter(): Router {
 
   router.post("/groups", async (req, res) => {
     const parsed = createGroupSchema.safeParse(req.body);
+    const ownerId = authUserId(req);
     if (!parsed.success) {
       sendValidationError(res, parsed.error.issues[0]?.message ?? "Invalid create group payload.");
       return;
@@ -355,7 +297,7 @@ export function createRelationRouter(): Router {
     try {
       const response = await invokeRelation<CreateGroupResponse>("CreateGroup", {
         requestId: requestId(req),
-        ownerId: Number(parsed.data.ownerId),
+        ownerId: Number(ownerId),
         groupName: parsed.data.name
       });
 
@@ -405,12 +347,23 @@ export function createRelationRouter(): Router {
 
   router.get("/groups/:groupId/members", async (req, res) => {
     const parsedGroup = numericIdSchema.safeParse(req.params.groupId);
+    const userId = authUserId(req);
     if (!parsedGroup.success) {
       sendValidationError(res, "Group ID must be numeric.");
       return;
     }
 
     try {
+      if (!(await isGroupMember(parsedGroup.data, userId))) {
+        res.status(403).json({
+          ok: false,
+          error: {
+            code: "GROUP_NOT_MEMBER",
+            message: "Group members are only visible to group members."
+          }
+        });
+        return;
+      }
       const response = await invokeRelation<ListGroupMembersResponse>("ListGroupMembers", {
         requestId: requestId(req),
         groupId: Number(parsedGroup.data)
@@ -497,6 +450,18 @@ async function getGroupInfo(groupId: string): Promise<GroupInfo | null> {
   return rows[0] ? toGroupInfo(rows[0]) : null;
 }
 
+async function isGroupMember(groupId: string, userId: string): Promise<boolean> {
+  if (!hasMysqlConfig()) {
+    throw new Error("MySQL group membership lookup connection is not configured.");
+  }
+
+  const [rows] = await getMysqlPool().execute<RowDataPacket[]>(
+    "SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ? LIMIT 1",
+    [groupId, userId]
+  );
+  return rows.length > 0;
+}
+
 function toGroupInfo(row: GroupRow): GroupInfo {
   return {
     groupId: String(row.id),
@@ -510,16 +475,16 @@ function toGroupInfo(row: GroupRow): GroupInfo {
 
 async function handleFriendRequestAction(req: express.Request, res: express.Response, method: "AcceptFriendRequest" | "RejectFriendRequest") {
   const parsedRequest = numericIdSchema.safeParse(req.params.requestId);
-  const parsedBody = friendRequestActionSchema.safeParse(req.body);
-  if (!parsedRequest.success || !parsedBody.success) {
-    sendValidationError(res, "User ID and friend request ID must be numeric.");
+  const userId = authUserId(req);
+  if (!parsedRequest.success) {
+    sendValidationError(res, "Friend request ID must be numeric.");
     return;
   }
 
   try {
     const response = await invokeRelation<CommonResponse>(method, {
       requestId: requestId(req),
-      userId: Number(parsedBody.data.userId),
+      userId: Number(userId),
       friendRequestId: Number(parsedRequest.data)
     });
 
@@ -536,16 +501,16 @@ async function handleFriendRequestAction(req: express.Request, res: express.Resp
 
 async function handleGroupUserAction(req: express.Request, res: express.Response, method: "JoinGroup" | "LeaveGroup") {
   const parsedGroup = numericIdSchema.safeParse(req.params.groupId);
-  const parsedBody = userActionSchema.safeParse(req.body);
-  if (!parsedGroup.success || !parsedBody.success) {
-    sendValidationError(res, "User ID and group ID must be numeric.");
+  const userId = authUserId(req);
+  if (!parsedGroup.success) {
+    sendValidationError(res, "Group ID must be numeric.");
     return;
   }
 
   try {
     const response = await invokeRelation<CommonResponse>(method, {
       requestId: requestId(req),
-      userId: Number(parsedBody.data.userId),
+      userId: Number(userId),
       groupId: Number(parsedGroup.data)
     });
 
@@ -562,7 +527,7 @@ async function handleGroupUserAction(req: express.Request, res: express.Response
 
 function invokeRelation<TResponse>(method: RelationMethod, request: Record<string, unknown>) {
   return new Promise<TResponse>((resolve, reject) => {
-    getRelationClient()[method](request, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
+    getRelationClient()[method](request, internalMetadata(), { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
       if (error) reject(error);
       else resolve(response as TResponse);
     });
@@ -646,8 +611,9 @@ function sendGroupLookupError(res: express.Response, message: string, error: unk
 }
 
 function statusForRelationCode(code: number) {
-  if ([1001, 7003, 7104, 7105, 10007, 12004].includes(code)) return 400;
-  if ([3002, 7002, 7101, 7103, 12001].includes(code)) return 404;
+  if ([1001, 7003, 7104, 12004].includes(code)) return 400;
+  if ([7103, 7105, 10007].includes(code)) return 403;
+  if ([3002, 7002, 7101, 12001].includes(code)) return 404;
   if ([7001, 7102, 12002, 12003].includes(code)) return 409;
   return 502;
 }

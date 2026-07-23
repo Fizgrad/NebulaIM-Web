@@ -7,6 +7,7 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
+import { internalMetadata } from "./grpcMetadata.js";
 
 type CommonResponse = {
   code: number;
@@ -110,10 +111,7 @@ async function getOnlineStatus(userId: string): Promise<PresenceInfo> {
 
 function invokeGateway<TResponse>(method: "GetOnlineStatus", request: Record<string, unknown>) {
   return new Promise<TResponse>((resolve, reject) => {
-    const metadata = new grpc.Metadata();
-    if (config.internalRpcToken) {
-      metadata.set("x-nebula-internal-token", config.internalRpcToken);
-    }
+    const metadata = internalMetadata();
     getGatewayClient()[method](request, metadata, { deadline: Date.now() + config.gatewayRequestTimeoutMs }, (error, response) => {
       if (error) reject(error);
       else resolve(response as TResponse);

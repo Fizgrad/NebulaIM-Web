@@ -13,7 +13,7 @@ Browser
   -> HTTP
   -> Web Bridge
   -> gRPC
-UserService / RelationService / ConversationService / MessageService / AdminService
+UserService / RelationService / ConversationService / MessageService / DeviceService / AdminService
 
 Browser
   -> WebSocket /ws
@@ -34,7 +34,7 @@ The browser does not send JSON to the Gateway. Browser-safe HTTP routes are expo
 - `/app/contacts` friends, username or user ID friend requests, incoming requests and outgoing requests.
 - `/app/groups` joined group search, group creation, group name or ID search, join, leave and member list.
 - `/app/profile` current account and Gateway connection metadata.
-- `/app/settings` theme, language, endpoint and local action settings.
+- `/app/settings` theme, language, endpoint, device and local action settings.
 - `/dashboard` Bridge health and AdminService runtime metrics.
 - `/admin` AdminService operations for health, service overview, audit events, outbox, Kafka lag and cleanup.
 
@@ -117,7 +117,7 @@ The app includes a `404.html` single-page fallback so direct links such as `/Neb
 
 ### Bridge HTTP API
 
-The Bridge exposes HTTP routes over backend gRPC services:
+The Bridge exposes HTTP routes over backend gRPC services. Except for `GET /health`, `GET /info`, `WS /ws`, `POST /api/auth/register`, and `POST /api/auth/refresh`, browser API calls require `Authorization: Bearer <NebulaIM token>`. User-owned routes derive the current user from that token.
 
 ```text
 GET  /health
@@ -141,23 +141,34 @@ POST /api/relation/groups
 POST /api/relation/groups/:groupId/join
 POST /api/relation/groups/:groupId/leave
 GET  /api/relation/groups/:groupId
+GET  /api/relation/groups/:groupId/members
 
 GET  /api/conversations
-GET  /api/conversations/:conversationId/messages
 POST /api/conversations/:conversationId/read
+
+GET  /api/devices
+POST /api/devices/:deviceId/kick
+POST /api/devices/kick-all
 
 POST /api/uploads/images
 POST /api/messages/single
 POST /api/messages/group
+GET  /api/messages/conversations/:conversationId
+GET  /api/messages/read-state?messageIds=10001,10002
 GET  /media/<object-key>
 
-GET  /api/presence
+GET  /api/presence/users
 
-GET  /api/admin/overview
+GET  /api/admin/health
+GET  /api/admin/system-stats
+GET  /api/admin/outbox-stats
+GET  /api/admin/kafka-lag
+GET  /api/admin/service-overview
+GET  /api/admin/audit-events
 POST /api/admin/cleanup
 ```
 
-Admin routes require `X-Nebula-Admin-Token`. Do not commit raw AdminService tokens.
+Device routes call DeviceService for the signed-in user's device list and revocation actions. Message, relation, group, conversation, device and upload routes ignore client-supplied current-user IDs and use the authenticated token identity. Message read-state only returns receipt data for messages in conversations owned by the signed-in user. Bridge-to-backend gRPC calls include `INTERNAL_RPC_TOKEN` when configured. Admin routes require `X-Nebula-Admin-Token`. Do not commit raw AdminService tokens.
 
 Image messages use `POST /api/uploads/images` first. Development can keep files under `UPLOAD_DIR` and serve them from `/uploads/...`. Production uses MinIO through the S3-compatible Bridge storage adapter, stores objects in the `nebulaim-media` bucket, and serves returned URLs from `/media/...`. The frontend sends the returned URL as a `contentType: "image"` message. When a user selects an image and also enters text, one send action sends the image message first and then sends the text message; the current protocol does not create a combined image-plus-text payload.
 
@@ -187,7 +198,7 @@ NebulaIM Web 是 NebulaIM 的 React + TypeScript 前端客户端。它通过 Web
   -> HTTP
   -> Web Bridge
   -> gRPC
-UserService / RelationService / ConversationService / MessageService / AdminService
+UserService / RelationService / ConversationService / MessageService / DeviceService / AdminService
 
 浏览器
   -> WebSocket /ws
@@ -208,7 +219,7 @@ MessageService / PushService / UserService
 - `/app/contacts` 好友、按用户名或用户 ID 发送好友请求、收到的请求和发出的请求。
 - `/app/groups` 已加入群组搜索、创建群组、按群名称或 ID 搜索加入、退出和成员列表。
 - `/app/profile` 当前账号和 Gateway 连接信息。
-- `/app/settings` 主题、语言、端点和本地操作设置。
+- `/app/settings` 主题、语言、端点、设备和本地操作设置。
 - `/dashboard` Bridge 健康状态和 AdminService 运行指标。
 - `/admin` AdminService 的健康检查、服务概览、审计事件、Outbox、Kafka 滞后和清理操作。
 
@@ -291,7 +302,7 @@ PAGES_GATEWAY_WS_URL=wss://<bridge-host>/ws
 
 ### Bridge HTTP API
 
-Bridge 通过 HTTP 路由暴露后端 gRPC 服务：
+Bridge 通过 HTTP 路由暴露后端 gRPC 服务。除了 `GET /health`、`GET /info`、`WS /ws`、`POST /api/auth/register` 和 `POST /api/auth/refresh`，浏览器业务 API 都需要 `Authorization: Bearer <NebulaIM token>`。用户相关路由会从 token 解析当前用户。
 
 ```text
 GET  /health
@@ -315,23 +326,34 @@ POST /api/relation/groups
 POST /api/relation/groups/:groupId/join
 POST /api/relation/groups/:groupId/leave
 GET  /api/relation/groups/:groupId
+GET  /api/relation/groups/:groupId/members
 
 GET  /api/conversations
-GET  /api/conversations/:conversationId/messages
 POST /api/conversations/:conversationId/read
+
+GET  /api/devices
+POST /api/devices/:deviceId/kick
+POST /api/devices/kick-all
 
 POST /api/uploads/images
 POST /api/messages/single
 POST /api/messages/group
+GET  /api/messages/conversations/:conversationId
+GET  /api/messages/read-state?messageIds=10001,10002
 GET  /media/<object-key>
 
-GET  /api/presence
+GET  /api/presence/users
 
-GET  /api/admin/overview
+GET  /api/admin/health
+GET  /api/admin/system-stats
+GET  /api/admin/outbox-stats
+GET  /api/admin/kafka-lag
+GET  /api/admin/service-overview
+GET  /api/admin/audit-events
 POST /api/admin/cleanup
 ```
 
-Admin 路由需要 `X-Nebula-Admin-Token`。不要提交明文 AdminService token。
+设备路由调用 DeviceService 获取设备列表和踢出设备。消息、关系、群组、会话、设备和上传路由会忽略客户端传来的当前用户 ID，统一使用 token 解析出的身份。消息 read-state 只返回当前登录用户拥有的会话中的消息回执。Bridge 到后端的 gRPC 调用会在配置后携带 `INTERNAL_RPC_TOKEN`。Admin 路由需要 `X-Nebula-Admin-Token`。不要提交明文 AdminService token。
 
 图片消息会先调用 `POST /api/uploads/images`。开发环境可以继续把文件保存到 `UPLOAD_DIR` 并通过 `/uploads/...` 访问。生产环境通过 Bridge 的 S3 兼容存储适配器上传到 MinIO，图片对象保存在 `nebulaim-media` bucket 中，并通过 `/media/...` 返回给前端。前端再把返回的 URL 作为 `contentType: "image"` 消息发送。当用户选择图片并输入文字时，一次发送动作会先发送图片消息，再发送文字消息；当前协议不生成图片加文字的复合消息体。
 
