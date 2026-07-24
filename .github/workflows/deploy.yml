@@ -206,6 +206,8 @@ jobs:
           swap_started="0"
           backed_up_components=""
           installed_components=""
+          revision_backed_up="0"
+          revision_installed="0"
 
           cleanup_tmp() {
             rm -rf "${tmp_dir}"
@@ -230,9 +232,15 @@ jobs:
               case " ${backed_up_components} " in
                 *" ${component} "*)
                   ${SUDO} mv "${DEPLOY_PATH}/${component}.prev" "${DEPLOY_PATH}/${component}" >/dev/null 2>&1 || true
-                  ;;
+                ;;
               esac
             done
+            if [ "${revision_installed}" = "1" ]; then
+              ${SUDO} rm -f "${DEPLOY_PATH}/REVISION" >/dev/null 2>&1 || true
+            fi
+            if [ "${revision_backed_up}" = "1" ]; then
+              ${SUDO} mv "${DEPLOY_PATH}/REVISION.prev" "${DEPLOY_PATH}/REVISION" >/dev/null 2>&1 || true
+            fi
             ${SUDO} rm -rf "${stage_dir}" >/dev/null 2>&1 || true
 
             ${SUDO} systemctl restart "${DEPLOY_SERVICE}" >/dev/null 2>&1 || true
@@ -313,13 +321,22 @@ jobs:
             ${SUDO} mv "${stage_dir}/${component}" "${DEPLOY_PATH}/${component}"
             installed_components="${installed_components} ${component}"
           done
+          ${SUDO} rm -f "${DEPLOY_PATH}/REVISION.prev"
+          if [ -f "${DEPLOY_PATH}/REVISION" ]; then
+            ${SUDO} mv "${DEPLOY_PATH}/REVISION" "${DEPLOY_PATH}/REVISION.prev"
+            revision_backed_up="1"
+          fi
+          ${SUDO} mv "${stage_dir}/REVISION" "${DEPLOY_PATH}/REVISION"
+          revision_installed="1"
           ${SUDO} rm -rf "${stage_dir}"
-          ${SUDO} chown root:nebulaim-web "${DEPLOY_PATH}" "${DEPLOY_PATH}/bridge" "${DEPLOY_PATH}/proto" "${DEPLOY_PATH}/deploy" "${DEPLOY_PATH}/web"
+          ${SUDO} chown root:nebulaim-web "${DEPLOY_PATH}" "${DEPLOY_PATH}/REVISION" "${DEPLOY_PATH}/bridge" "${DEPLOY_PATH}/proto" "${DEPLOY_PATH}/deploy" "${DEPLOY_PATH}/web"
+          ${SUDO} chmod 640 "${DEPLOY_PATH}/REVISION"
           ${SUDO} chmod 750 "${DEPLOY_PATH}" "${DEPLOY_PATH}/bridge" "${DEPLOY_PATH}/proto" "${DEPLOY_PATH}/deploy" "${DEPLOY_PATH}/web"
 
           ${SUDO} systemctl restart "${DEPLOY_SERVICE}"
           ${SUDO} systemctl is-active --quiet "${DEPLOY_SERVICE}"
 
           ${SUDO} rm -rf "${DEPLOY_PATH}/web.prev" "${DEPLOY_PATH}/bridge.prev" "${DEPLOY_PATH}/proto.prev" "${DEPLOY_PATH}/deploy.prev"
+          ${SUDO} rm -f "${DEPLOY_PATH}/REVISION.prev"
           swap_started="0"
           REMOTE
