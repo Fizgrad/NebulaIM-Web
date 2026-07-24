@@ -10,6 +10,7 @@ import { logger } from "../utils/logger.js";
 import { internalMetadata } from "./grpcMetadata.js";
 import { grpcChannelCredentials, grpcChannelOptions } from "./grpcCredentials.js";
 import { authUserId } from "./authMiddleware.js";
+import { numericIdSchema } from "./validation.js";
 
 type CommonResponse = {
   code: number;
@@ -122,8 +123,6 @@ type RelationServiceConstructor = new (
   credentials: grpc.ChannelCredentials,
   options?: grpc.ChannelOptions
 ) => RelationGrpcClient;
-
-const numericIdSchema = z.string().regex(/^\d+$/, "ID must be numeric.");
 
 const searchGroupsQuerySchema = z.object({
   q: z.string().trim().min(1, "Search text is required.").max(128, "Search text is too long."),
@@ -525,7 +524,7 @@ function sendRpcError(res: express.Response, message: string, error: unknown) {
 }
 
 function statusForRelationCode(code: number) {
-  if ([1001, 7003, 7104, 12004].includes(code)) return 400;
+  if ([1001, 7003, 7104].includes(code)) return 400;
   if ([7103, 7105, 10007].includes(code)) return 403;
   if ([3002, 7002, 7101, 12001].includes(code)) return 404;
   if ([7001, 7102, 12002, 12003].includes(code)) return 409;
@@ -547,8 +546,7 @@ function relationCodeToString(code: number) {
     10007: "GATEWAY_PERMISSION_DENIED",
     12001: "FRIEND_REQUEST_NOT_FOUND",
     12002: "FRIEND_REQUEST_ALREADY_EXISTS",
-    12003: "FRIEND_REQUEST_ALREADY_HANDLED",
-    12004: "FRIEND_REQUEST_REQUIRED"
+    12003: "FRIEND_REQUEST_ALREADY_HANDLED"
   };
   return names[code] ?? `RELATION_SERVICE_ERROR_${code}`;
 }

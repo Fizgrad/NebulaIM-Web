@@ -64,13 +64,10 @@ async function resolveFriendUserId(baseUrl: string, identifier: string) {
 function fallbackUser(userId: string): User {
   return {
     id: userId,
-    username: `user_${userId}`,
-    nickname: `User ${userId}`,
+    username: "",
+    nickname: `#${userId}`,
     avatarColor: "from-cyan-500 to-blue-500",
-    status: "offline",
-    registeredAt: Date.now(),
-    gateway: "RelationService",
-    connectionId: `user-${userId}`
+    status: "offline"
   };
 }
 
@@ -126,9 +123,9 @@ export const useContactStore = create<ContactState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const [contacts, incoming, outgoing] = await Promise.all([
-        listBridgeFriends(settings.bridgeHttpUrl, userId),
-        listBridgeFriendRequests(settings.bridgeHttpUrl, userId, true, 0),
-        listBridgeFriendRequests(settings.bridgeHttpUrl, userId, false, 0)
+        listBridgeFriends(settings.bridgeHttpUrl),
+        listBridgeFriendRequests(settings.bridgeHttpUrl, true, 0),
+        listBridgeFriendRequests(settings.bridgeHttpUrl, false, 0)
       ]);
       const [incomingRequests, outgoingRequests] = await Promise.all([
         hydrateRequests(settings.bridgeHttpUrl, incoming, userId, "incoming"),
@@ -173,10 +170,10 @@ export const useContactStore = create<ContactState>((set) => ({
       if (toUserId === currentUserId) {
         throw new Error(tr("store.friendRequestSelf"));
       }
-      await sendBridgeFriendRequest(settings.bridgeHttpUrl, currentUserId, toUserId, message.trim());
+      await sendBridgeFriendRequest(settings.bridgeHttpUrl, toUserId, message.trim());
       const [incoming, outgoing] = await Promise.all([
-        listBridgeFriendRequests(settings.bridgeHttpUrl, currentUserId, true, 0),
-        listBridgeFriendRequests(settings.bridgeHttpUrl, currentUserId, false, 0)
+        listBridgeFriendRequests(settings.bridgeHttpUrl, true, 0),
+        listBridgeFriendRequests(settings.bridgeHttpUrl, false, 0)
       ]);
       const [incomingRequests, outgoingRequests] = await Promise.all([
         hydrateRequests(settings.bridgeHttpUrl, incoming, currentUserId, "incoming"),
@@ -204,11 +201,11 @@ export const useContactStore = create<ContactState>((set) => ({
     const friendRequestId = requireNumericId(requestId, "Friend request id");
     set({ isLoading: true, error: null });
     try {
-      await acceptBridgeFriendRequest(settings.bridgeHttpUrl, currentUserId, friendRequestId);
+      await acceptBridgeFriendRequest(settings.bridgeHttpUrl, friendRequestId);
       const [contacts, incoming, outgoing] = await Promise.all([
-        listBridgeFriends(settings.bridgeHttpUrl, currentUserId),
-        listBridgeFriendRequests(settings.bridgeHttpUrl, currentUserId, true, 0),
-        listBridgeFriendRequests(settings.bridgeHttpUrl, currentUserId, false, 0)
+        listBridgeFriends(settings.bridgeHttpUrl),
+        listBridgeFriendRequests(settings.bridgeHttpUrl, true, 0),
+        listBridgeFriendRequests(settings.bridgeHttpUrl, false, 0)
       ]);
       const [incomingRequests, outgoingRequests] = await Promise.all([
         hydrateRequests(settings.bridgeHttpUrl, incoming, currentUserId, "incoming"),
@@ -238,8 +235,8 @@ export const useContactStore = create<ContactState>((set) => ({
     const friendRequestId = requireNumericId(requestId, "Friend request id");
     set({ isLoading: true, error: null });
     try {
-      await rejectBridgeFriendRequest(settings.bridgeHttpUrl, currentUserId, friendRequestId);
-      const incoming = await listBridgeFriendRequests(settings.bridgeHttpUrl, currentUserId, true, 0);
+      await rejectBridgeFriendRequest(settings.bridgeHttpUrl, friendRequestId);
+      const incoming = await listBridgeFriendRequests(settings.bridgeHttpUrl, true, 0);
       const incomingRequests = await hydrateRequests(settings.bridgeHttpUrl, incoming, currentUserId, "incoming");
       const presence = await loadPresence(settings.bridgeHttpUrl, incomingRequests.map((request) => request.peer.id));
       set({
@@ -255,11 +252,11 @@ export const useContactStore = create<ContactState>((set) => ({
   },
   deleteFriend: async (userId) => {
     const settings = useSettingsStore.getState();
-    const currentUserId = requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
+    requireNumericId(useAuthStore.getState().user?.id, "Current user_id");
     const friendId = requireNumericId(userId, "Friend user_id");
     set({ isLoading: true, error: null });
     try {
-      await deleteBridgeFriend(settings.bridgeHttpUrl, currentUserId, friendId);
+      await deleteBridgeFriend(settings.bridgeHttpUrl, friendId);
       set((state) => ({
         isLoading: false,
         error: null,

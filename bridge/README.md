@@ -307,7 +307,7 @@ Clients send the raw AdminService token in:
 X-Nebula-Admin-Token: <token>
 ```
 
-The Bridge forwards that value to AdminService as gRPC metadata key `x-nebula-admin-token`. The token is not written to logs.
+The Bridge forwards that value to AdminService as gRPC metadata key `x-nebula-admin-token`. The token is not written to logs. The bundled frontend keeps it in memory only, so reloading or closing the page clears it.
 
 ## Protobuf
 

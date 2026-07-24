@@ -127,6 +127,7 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
                 value={groupName}
                 onChange={(event) => setGroupName(event.target.value)}
                 placeholder={t("groups.groupNamePlaceholder")}
+                maxLength={128}
               />
               <Button type="submit" variant="primary" disabled={isLoading} className="h-11 w-full">
                 <UsersRound className="h-4 w-4" />
@@ -149,6 +150,7 @@ export function GroupList({ onMessage, onMembers }: GroupListProps) {
                 onChange={(event) => setJoinQuery(event.target.value)}
                 placeholder={t("groups.joinPlaceholder")}
                 icon={<Search className="h-4 w-4" />}
+                maxLength={128}
               />
               <Button type="submit" variant="outline" disabled={isLoading || isSearching} className="h-11 w-full">
                 <Search className="h-4 w-4" />

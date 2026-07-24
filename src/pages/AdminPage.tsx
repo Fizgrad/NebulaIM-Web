@@ -14,8 +14,9 @@ import { useSettingsStore } from "../store/settingsStore";
 import { useI18n } from "../i18n";
 
 function formatAdminNumber(value?: string, locale = "en") {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return value ?? "0";
+  if (value === undefined || value === "") return "—";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "—";
   return new Intl.NumberFormat(locale).format(numeric);
 }
 

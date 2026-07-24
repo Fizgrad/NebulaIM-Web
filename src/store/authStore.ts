@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { User } from "../types/user";
-import { refreshBridgeToken } from "../api/bridgeApi";
+import { getBridgeUserInfo, kickBridgeDevice, refreshBridgeToken } from "../api/bridgeApi";
 import { getGatewayClient, resetGatewayClient } from "../services/gatewayClient";
 import { useSettingsStore } from "./settingsStore";
 import { normalizeExpireAt, isTokenExpiringSoon } from "../services/authToken";
@@ -21,7 +21,7 @@ type AuthState = {
   register: (username: string, password: string, nickname: string) => Promise<void>;
   refreshToken: () => Promise<boolean>;
   ensureFreshToken: () => Promise<boolean>;
-  logout: () => void;
+  logout: (revokeRemote?: boolean) => Promise<void>;
   clearError: () => void;
 };
 
@@ -51,10 +51,7 @@ export const useAuthStore = create<AuthState>()(
             username: result.username ?? username,
             nickname: result.nickname ?? username,
             avatarColor: "from-violet-500 to-cyan-400",
-            status: "online",
-            registeredAt: Date.now(),
-            gateway: settings.directGatewayWsUrl,
-            connectionId: `gateway-${result.userId}`
+            status: "online"
           };
           set({
             user,
@@ -65,6 +62,12 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             error: null
           });
+          try {
+            const profile = await getBridgeUserInfo(settings.bridgeHttpUrl, result.userId);
+            set({ user: { ...profile, status: "online" } });
+          } catch (error) {
+            clientLogger.warn("Authenticated user profile could not be loaded", error);
+          }
         } catch (error) {
           set({
             isLoading: false,
@@ -115,9 +118,26 @@ export const useAuthStore = create<AuthState>()(
         if (!isTokenExpiringSoon(state.tokenExpireAt)) return true;
         return state.refreshToken();
       },
-      logout: () => {
+      logout: async (revokeRemote = true) => {
+        const state = get();
+        if (revokeRemote && state.isAuthenticated && state.user?.id) {
+          try {
+            const settings = useSettingsStore.getState();
+            await kickBridgeDevice(settings.bridgeHttpUrl, currentDeviceId());
+          } catch (error) {
+            clientLogger.warn("Remote session revoke failed during logout", error);
+          }
+        }
         resetGatewayClient();
-        set({ user: null, token: null, tokenExpireAt: null, lastRefreshAt: null, isAuthenticated: false, error: null });
+        set({
+          user: null,
+          token: null,
+          tokenExpireAt: null,
+          lastRefreshAt: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null
+        });
       },
       clearError: () => set({ error: null })
     }),

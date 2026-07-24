@@ -9,6 +9,7 @@ import { logger } from "../utils/logger.js";
 import { internalMetadata } from "./grpcMetadata.js";
 import { grpcChannelCredentials, grpcChannelOptions } from "./grpcCredentials.js";
 import { authUserId } from "./authMiddleware.js";
+import { deviceIdSchema } from "./validation.js";
 
 type CommonResponse = {
   code: number;
@@ -82,11 +83,12 @@ export function createDeviceRouter(): Router {
 
   router.post("/:deviceId/kick", async (req, res) => {
     const userId = authUserId(req);
-    const deviceId = req.params.deviceId?.trim() ?? "";
-    if (!deviceId) {
-      sendValidationError(res, "Device ID is required.");
+    const parsedDeviceId = deviceIdSchema.safeParse(req.params.deviceId);
+    if (!parsedDeviceId.success) {
+      sendValidationError(res, parsedDeviceId.error.issues[0]?.message ?? "Invalid device ID.");
       return;
     }
+    const deviceId = parsedDeviceId.data;
 
     const requestId = req.header("x-request-id") ?? createId("device_kick_req");
     try {

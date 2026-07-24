@@ -27,8 +27,7 @@ export function ContactCard({ user, onMessage, onDelete }: ContactCardProps) {
               {user.status === "online" ? t("common.online") : user.status === "away" ? t("common.away") : t("common.offline")}
             </Badge>
           </div>
-          <p className="mt-1 truncate text-xs text-nebula-muted">@{user.username}</p>
-          <p className="mt-2 truncate text-xs text-slate-400">{user.gateway}</p>
+          {user.username ? <p className="mt-1 truncate text-xs text-nebula-muted">@{user.username}</p> : null}
         </div>
         <div className="flex shrink-0 gap-2">
           <Button variant="secondary" size="icon" onClick={() => onMessage(user)} aria-label={t("contacts.message", { name: user.nickname })}>

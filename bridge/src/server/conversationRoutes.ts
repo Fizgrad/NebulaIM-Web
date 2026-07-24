@@ -11,6 +11,7 @@ import { internalMetadata } from "./grpcMetadata.js";
 import { grpcChannelCredentials, grpcChannelOptions } from "./grpcCredentials.js";
 import { markMessageConversationRead } from "./messageRoutes.js";
 import { authUserId } from "./authMiddleware.js";
+import { numericIdSchema } from "./validation.js";
 
 type CommonResponse = {
   code: number;
@@ -65,8 +66,6 @@ type ConversationServiceConstructor = new (
   credentials: grpc.ChannelCredentials,
   options?: grpc.ChannelOptions
 ) => ConversationGrpcClient;
-
-const numericIdSchema = z.string().regex(/^\d+$/, "ID must be numeric.");
 
 const listSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

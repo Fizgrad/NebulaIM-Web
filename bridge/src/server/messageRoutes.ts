@@ -10,6 +10,7 @@ import { logger } from "../utils/logger.js";
 import { internalMetadata } from "./grpcMetadata.js";
 import { grpcChannelCredentials, grpcChannelOptions } from "./grpcCredentials.js";
 import { authUserId } from "./authMiddleware.js";
+import { numericIdSchema } from "./validation.js";
 
 type CommonResponse = {
   code: number;
@@ -87,7 +88,6 @@ type MessageServiceConstructor = new (
   options?: grpc.ChannelOptions
 ) => MessageGrpcClient;
 
-const numericIdSchema = z.string().regex(/^\d+$/, "ID must be numeric.");
 const maxUint32 = 4_294_967_295;
 const historyQuerySchema = z.object({
   before: z.coerce.number().int().positive().optional(),
@@ -111,14 +111,14 @@ const sendSingleSchema = z.object({
   toUserId: numericIdSchema,
   contentType: z.enum(["text", "image", "MESSAGE_CONTENT_TYPE_TEXT", "MESSAGE_CONTENT_TYPE_IMAGE"]).optional().default("text"),
   content: z.string().trim().min(1, "Message content is required.").max(4096, "Message content is too long."),
-  clientSequenceId: z.coerce.number().int().min(0).max(maxUint32).optional().default(0)
+  clientSequenceId: z.coerce.number().int().min(1).max(maxUint32)
 });
 
 const sendGroupSchema = z.object({
   groupId: numericIdSchema,
   contentType: z.enum(["text", "image", "MESSAGE_CONTENT_TYPE_TEXT", "MESSAGE_CONTENT_TYPE_IMAGE"]).optional().default("text"),
   content: z.string().trim().min(1, "Message content is required.").max(4096, "Message content is too long."),
-  clientSequenceId: z.coerce.number().int().min(0).max(maxUint32).optional().default(0)
+  clientSequenceId: z.coerce.number().int().min(1).max(maxUint32)
 });
 
 let cachedClient: MessageGrpcClient | null = null;

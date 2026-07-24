@@ -14,7 +14,7 @@ export type DashboardRuntime = {
   serviceHealth: ServiceHealth[];
   events: DashboardEvent[];
   totalOutbox: number;
-  outboxPublishRate: number;
+  outboxPublishRate: number | null;
   totalKafkaLag: number;
   checkedAt: number;
 };
@@ -35,10 +35,14 @@ export async function getDashboardRuntime(baseUrl: string, adminToken: string): 
   assertOk("GetServiceOverview", serviceOverview.response);
   assertOk("ListAuditEvents", auditEvents.response);
 
+  const published = toNumber(outboxStats.published, "outbox published");
   const totalOutbox =
-    toNumber(outboxStats.pending) + toNumber(outboxStats.published) + toNumber(outboxStats.failed) + toNumber(outboxStats.dead);
-  const outboxPublishRate = totalOutbox === 0 ? 100 : (toNumber(outboxStats.published) / totalOutbox) * 100;
-  const totalKafkaLag = kafkaLag.lags.reduce((sum, lag) => sum + toNumber(lag.lag), 0);
+    toNumber(outboxStats.pending, "outbox pending") +
+    published +
+    toNumber(outboxStats.failed, "outbox failed") +
+    toNumber(outboxStats.dead, "outbox dead");
+  const outboxPublishRate = totalOutbox === 0 ? null : (published / totalOutbox) * 100;
+  const totalKafkaLag = kafkaLag.lags.reduce((sum, lag) => sum + toNumber(lag.lag, "Kafka lag"), 0);
   const checkedAt = Date.now();
 
   return {
@@ -62,7 +66,7 @@ function toDashboardEvent(event: AdminAuditEvent): DashboardEvent {
     type: "admin audit",
     service: event.principal || "AdminService",
     message: `${event.action || "admin action"} ${event.decision ? `(${event.decision})` : ""}${event.detail ? ` - ${event.detail}` : ""}`,
-    createdAt: Number(event.timestampMs || Date.now())
+    createdAt: toNumber(event.timestampMs, "audit timestamp")
   };
 }
 
@@ -81,7 +85,10 @@ function assertOk(operation: string, response: AdminCommonResponse) {
   }
 }
 
-function toNumber(value: string | number | undefined) {
-  const numeric = Number(value ?? 0);
-  return Number.isFinite(numeric) ? numeric : 0;
+function toNumber(value: string | number | undefined, field: string) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    throw new Error(`AdminService returned an invalid ${field}.`);
+  }
+  return numeric;
 }

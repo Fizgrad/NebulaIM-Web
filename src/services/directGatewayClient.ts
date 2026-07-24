@@ -4,9 +4,6 @@ import type {
   LoginResult,
   MessageHandler,
   RegisterResult,
-  SendGroupMessagePayload,
-  SendMessageResult,
-  SendSingleMessagePayload,
   StatusHandler
 } from "../types/gateway";
 import type { Message, MessageContentType } from "../types/message";
@@ -24,15 +21,9 @@ const MessageType = {
   RESUME_SESSION_RESP: 1006,
   HEARTBEAT_REQ: 1101,
   HEARTBEAT_RESP: 1102,
-  SEND_SINGLE_MSG_REQ: 2001,
-  SEND_SINGLE_MSG_RESP: 2002,
-  SEND_GROUP_MSG_REQ: 2101,
-  SEND_GROUP_MSG_RESP: 2102,
   PUSH_MSG: 3001,
   ACK_REQ: 4001,
   ACK_RESP: 4002,
-  PULL_OFFLINE_MSG_REQ: 5001,
-  PULL_OFFLINE_MSG_RESP: 5002,
   ERROR_RESP: 9001
 } as const;
 
@@ -74,17 +65,6 @@ type ProtoLoginResponse = {
 type ProtoResumeSessionResponse = {
   response: ProtoCommonResponse;
   userId: string;
-};
-
-type ProtoSendMessageResponse = {
-  response: ProtoCommonResponse;
-  messageId: string;
-  serverTimestamp: string | number;
-};
-
-type ProtoPullOfflineMessagesResponse = {
-  response: ProtoCommonResponse;
-  messages: ProtoMessageData[];
 };
 
 type ProtoMessageData = {
@@ -271,55 +251,8 @@ export class DirectGatewayClient implements GatewayClient {
     return {
       userId: payload.userId,
       username,
-      nickname: username,
       token: payload.token,
       expireAt: Number(payload.expireAt ?? 0)
-    };
-  }
-
-  async sendSingleMessage(payload: SendSingleMessagePayload): Promise<SendMessageResult> {
-    const response = await this.request<ProtoSendMessageResponse>(
-      MessageType.SEND_SINGLE_MSG_REQ,
-      MessageType.SEND_SINGLE_MSG_RESP,
-      "nebula.proto.SendSingleMessageRequest",
-      {
-        requestId: this.requestId("send-single"),
-        fromUserId: toProtoUInt64(payload.fromUserId || this.userId || "0", "fromUserId"),
-        toUserId: toProtoUInt64(payload.toUserId, "toUserId"),
-        contentType: toProtoContentType(payload.contentType),
-        content: payload.content,
-        clientSequenceId: payload.clientSequenceId
-      },
-      "nebula.proto.SendSingleMessageResponse"
-    );
-    this.assertOk(response.response, "SendSingleMessage");
-    return {
-      messageId: response.messageId,
-      status: "sent",
-      serverTimestamp: Number(response.serverTimestamp || Date.now())
-    };
-  }
-
-  async sendGroupMessage(payload: SendGroupMessagePayload): Promise<SendMessageResult> {
-    const response = await this.request<ProtoSendMessageResponse>(
-      MessageType.SEND_GROUP_MSG_REQ,
-      MessageType.SEND_GROUP_MSG_RESP,
-      "nebula.proto.SendGroupMessageRequest",
-      {
-        requestId: this.requestId("send-group"),
-        fromUserId: toProtoUInt64(payload.fromUserId || this.userId || "0", "fromUserId"),
-        groupId: toProtoUInt64(payload.groupId, "groupId"),
-        contentType: toProtoContentType(payload.contentType),
-        content: payload.content,
-        clientSequenceId: payload.clientSequenceId
-      },
-      "nebula.proto.SendGroupMessageResponse"
-    );
-    this.assertOk(response.response, "SendGroupMessage");
-    return {
-      messageId: response.messageId,
-      status: "sent",
-      serverTimestamp: Number(response.serverTimestamp || Date.now())
     };
   }
 
@@ -336,25 +269,6 @@ export class DirectGatewayClient implements GatewayClient {
       "nebula.proto.AckMessageResponse"
     );
     this.assertOk(response.response, "AckMessage");
-  }
-
-  async pullOfflineMessages(userId = this.userId): Promise<Message[]> {
-    const response = await this.request<ProtoPullOfflineMessagesResponse>(
-      MessageType.PULL_OFFLINE_MSG_REQ,
-      MessageType.PULL_OFFLINE_MSG_RESP,
-      "nebula.proto.PullOfflineMessagesRequest",
-      {
-        requestId: this.requestId("pull-offline"),
-        userId: toProtoUInt64(userId, "userId"),
-        page: {
-          page: 1,
-          pageSize: 50
-        }
-      },
-      "nebula.proto.PullOfflineMessagesResponse"
-    );
-    this.assertOk(response.response, "PullOfflineMessages");
-    return response.messages.map((message) => this.toMessage(message));
   }
 
   sendHeartbeat(): void {
@@ -502,7 +416,7 @@ export class DirectGatewayClient implements GatewayClient {
       content: payload.content,
       contentType: fromProtoContentType(payload.contentType),
       status: "delivered",
-      createdAt: Number(payload.serverTimestamp || payload.timestamp || Date.now()),
+      createdAt: requiredProtoTimestamp(payload.serverTimestamp || payload.timestamp),
       isMine: fromUserId === this.userId,
       recalled: Boolean(payload.recalled),
       recalledAt: Number(payload.recalledAt ?? 0)
@@ -528,7 +442,9 @@ export class DirectGatewayClient implements GatewayClient {
     this.reconnectAttempts += 1;
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = undefined;
-      void this.connect();
+      void this.connect().catch((error) => {
+        clientLogger.warn("Gateway reconnect attempt failed", error);
+      });
     }, waitMs);
   }
 
@@ -579,7 +495,7 @@ export class DirectGatewayClient implements GatewayClient {
   }
 
   private requestId(prefix: string) {
-    return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return `${prefix}-${globalThis.crypto.randomUUID()}`;
   }
 
   private emitStatus(status: Omit<GatewayStatus, "gatewayUrl">): void {
@@ -600,10 +516,14 @@ function toProtoUInt64(value: string | number, fieldName: string): string | numb
   return Number.isSafeInteger(numericValue) ? numericValue : normalized;
 }
 
-function toProtoContentType(contentType: MessageContentType) {
-  return contentType === "image" ? 2 : 1;
-}
-
 function fromProtoContentType(contentType: string | number | undefined): MessageContentType {
   return contentType === 2 || contentType === "2" || contentType === "MESSAGE_CONTENT_TYPE_IMAGE" ? "image" : "text";
+}
+
+function requiredProtoTimestamp(value: string | number | undefined) {
+  const timestamp = Number(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    throw new Error("Gateway pushed a message without a valid timestamp.");
+  }
+  return timestamp;
 }

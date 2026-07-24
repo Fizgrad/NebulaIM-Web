@@ -23,7 +23,7 @@ Browser
 MessageService / PushService / UserService
 ```
 
-The browser does not send JSON to the Gateway. Browser-safe HTTP routes are exposed by the Bridge, while `/ws` forwards binary Gateway frames.
+The browser does not send JSON to the Gateway. Login, session resume, heartbeat, pushed messages and ACK use binary Packet + Protobuf over `/ws`. Message commands, history, relations, groups, devices and administration use authenticated Bridge HTTP routes.
 
 ### User Interface
 
@@ -113,9 +113,21 @@ PAGES_BRIDGE_HTTP_URL=https://<bridge-host>
 PAGES_GATEWAY_WS_URL=wss://<bridge-host>/ws
 ```
 
+In GitHub, set **Settings -> Pages -> Build and deployment -> Source** to **GitHub Actions**. Then add `PAGES_BRIDGE_HTTP_URL` and `PAGES_GATEWAY_WS_URL` under **Settings -> Secrets and variables -> Actions -> Variables**. Add `PAGES_BASE_PATH` only when the repository path differs from `/NebulaIM-Web/`. The Bridge must allow the Pages origin in `CORS_ORIGIN`.
+
 The app includes a `404.html` single-page fallback so direct links such as `/NebulaIM-Web/login` route correctly on GitHub Pages. Proto assets are loaded relative to `import.meta.env.BASE_URL`, so Pages sub-path deployment uses `/NebulaIM-Web/proto/*.proto`.
 
 ### Production Deployment Variables
+
+Prepare the server once. Node.js 22, npm, Docker, systemd and a running NebulaIM backend are required:
+
+```bash
+sudo install -d -m 750 /opt/nebulaim-web
+sudo install -m 640 deploy/production.env.example /opt/nebulaim-web/bridge.env
+sudo editor /opt/nebulaim-web/bridge.env
+```
+
+Set `PUBLIC_BASE_URL` to the public HTTPS origin, `CORS_ORIGIN` to the frontend origin, all backend hosts/ports to reachable values, and `INTERNAL_RPC_TOKEN` to the same raw token used by the backend. Keep backend gRPC and Gateway on loopback when the Bridge runs on the same server. The deployment workflow provisions MinIO and writes the bucket-scoped S3 credential into this server-local file.
 
 The server deployment workflow requires these GitHub environment secrets:
 
@@ -125,11 +137,52 @@ DEPLOY_HOST_KEY  verified known_hosts line for the target host and port
 DEPLOY_HOST      target DNS name or IP
 ```
 
-Set `DEPLOY_USER` and optional `DEPLOY_PORT` as secrets or variables. Set `DEPLOY_PATH` and `DEPLOY_SERVICE` as variables when their defaults are not suitable. `DEPLOY_PORT` must be in `1..65535`, `DEPLOY_PATH` must be a plain absolute path below `/opt`, and the service name may contain only systemd unit-name characters. The deployment account must be a non-root SSH user with passwordless sudo for the deployment commands. The runtime process uses the dedicated `nebulaim-web` system account. Releases are prepared in a staging directory; if any directory activation or service health check fails, the workflow restores each replaced component from its previous copy.
+Set `DEPLOY_USER` and optional `DEPLOY_PORT` as environment secrets or variables. `DEPLOY_SERVICE` is an optional repository variable. The deployment path is fixed at `/opt/nebulaim-web` to match the systemd unit. `DEPLOY_PORT` must be in `1..65535`, and the service name may contain only systemd unit-name characters. The deployment account must be a non-root SSH user with passwordless sudo for the deployment commands. The runtime process uses the dedicated `nebulaim-web` system account. Releases are prepared in a staging directory; if activation or health checks fail, the workflow restores the previous release.
+
+Generate the verified host key on a trusted machine:
+
+```bash
+ssh-keyscan -p <ssh-port> <deploy-host>
+```
+
+Store the complete output as `DEPLOY_HOST_KEY`; store the private deployment key as `DEPLOY_SSH_KEY`. Never use an unverified keyscan result obtained inside the deployment job.
+
+Terminate public TLS with Nginx and proxy the Bridge:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name im.example.com;
+
+    location /ws {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+```
+
+After the first workflow run:
+
+```bash
+sudo systemctl status nebulaim-web-bridge.service
+curl -fsS http://127.0.0.1:8080/health
+curl -fsS https://im.example.com/health
+```
 
 ### Bridge HTTP API
 
 The Bridge exposes HTTP routes over backend gRPC services. Except for `GET /health`, `GET /info`, `WS /ws`, `POST /api/auth/register`, and `POST /api/auth/refresh`, browser API calls require `Authorization: Bearer <NebulaIM token>`. User-owned routes derive the current user from that token.
+
+AdminService tokens are entered only on the Dashboard or Admin pages and remain in page memory. They are cleared by a reload and are not persisted to browser storage.
 
 ```text
 GET  /health
@@ -157,6 +210,9 @@ GET  /api/relation/groups/:groupId/members
 
 GET  /api/conversations
 POST /api/conversations/:conversationId/read  body: {"upToMessageId":"..."}
+DELETE /api/conversations/:conversationId
+POST /api/conversations/:conversationId/pin   body: {"value":true}
+POST /api/conversations/:conversationId/mute  body: {"value":true}
 
 GET  /api/devices
 POST /api/devices/:deviceId/kick
@@ -220,7 +276,7 @@ UserService / RelationService / ConversationService / MessageService / DeviceSer
 MessageService / PushService / UserService
 ```
 
-浏览器不会向 Gateway 发送 JSON。浏览器安全的 HTTP 路由由 Bridge 提供，`/ws` 负责转发二进制 Gateway 帧。
+浏览器不会向 Gateway 发送 JSON。登录、会话恢复、心跳、推送消息和 ACK 通过 `/ws` 使用二进制 Packet + Protobuf；消息命令、历史记录、关系、群组、设备和管理功能使用鉴权后的 Bridge HTTP 路由。
 
 ### 用户界面
 
@@ -310,9 +366,21 @@ PAGES_BRIDGE_HTTP_URL=https://<bridge-host>
 PAGES_GATEWAY_WS_URL=wss://<bridge-host>/ws
 ```
 
+在 GitHub 的 **Settings -> Pages -> Build and deployment -> Source** 中选择 **GitHub Actions**，再到 **Settings -> Secrets and variables -> Actions -> Variables** 添加 `PAGES_BRIDGE_HTTP_URL` 和 `PAGES_GATEWAY_WS_URL`。只有仓库路径不是 `/NebulaIM-Web/` 时才需要设置 `PAGES_BASE_PATH`。Bridge 的 `CORS_ORIGIN` 必须允许 Pages 的来源。
+
 应用包含 `404.html` 单页 fallback，因此 `/NebulaIM-Web/login` 这种直接访问链接可以在 GitHub Pages 上正确路由。Proto 资源基于 `import.meta.env.BASE_URL` 加载，所以 Pages 子路径部署会请求 `/NebulaIM-Web/proto/*.proto`。
 
 ### 生产部署变量
+
+服务器需要先完成一次初始化，并准备 Node.js 22、npm、Docker、systemd 和已运行的 NebulaIM 后端：
+
+```bash
+sudo install -d -m 750 /opt/nebulaim-web
+sudo install -m 640 deploy/production.env.example /opt/nebulaim-web/bridge.env
+sudo editor /opt/nebulaim-web/bridge.env
+```
+
+将 `PUBLIC_BASE_URL` 设置为公网 HTTPS 源，将 `CORS_ORIGIN` 设置为前端源；后端地址和端口必须可达，`INTERNAL_RPC_TOKEN` 必须与后端使用的原始 token 相同。Bridge 与后端位于同一台服务器时，后端 gRPC 和 Gateway 应保持回环监听。部署 workflow 会准备 MinIO，并把仅有媒体 Bucket 权限的 S3 凭据写入这个服务器本地文件。
 
 服务器部署 workflow 需要以下 GitHub environment secrets：
 
@@ -322,11 +390,52 @@ DEPLOY_HOST_KEY  已核验的目标主机和端口 known_hosts 记录
 DEPLOY_HOST      目标域名或 IP
 ```
 
-`DEPLOY_USER` 和可选的 `DEPLOY_PORT` 可以配置为 secret 或 variable；默认路径或服务名不适用时，再设置 `DEPLOY_PATH` 和 `DEPLOY_SERVICE` variables。`DEPLOY_PORT` 必须位于 `1..65535`，`DEPLOY_PATH` 必须是 `/opt` 下不含 shell 特殊字符的绝对路径，服务名只能使用 systemd unit 名称允许的字符。SSH 部署账号应是具备部署命令免密 sudo 权限的非 root 用户，运行时进程固定使用专用的 `nebulaim-web` 系统账号。发布先写入暂存目录；任一目录切换或服务健康检查失败时，workflow 会逐项恢复上一份内容。
+`DEPLOY_USER` 和可选的 `DEPLOY_PORT` 可以配置为 environment secret 或 variable；`DEPLOY_SERVICE` 是可选的 repository variable。部署目录固定为 `/opt/nebulaim-web`，与 systemd 单元一致。`DEPLOY_PORT` 必须位于 `1..65535`，服务名只能使用 systemd unit 名称允许的字符。SSH 部署账号应是具备部署命令免密 sudo 权限的非 root 用户，运行时进程固定使用专用的 `nebulaim-web` 系统账号。发布先写入暂存目录；激活或健康检查失败时会恢复上一份版本。
+
+在可信机器上生成已核验的主机公钥记录：
+
+```bash
+ssh-keyscan -p <SSH-端口> <部署主机>
+```
+
+把完整输出保存为 `DEPLOY_HOST_KEY`，把部署私钥保存为 `DEPLOY_SSH_KEY`。不要在部署任务中临时获取并直接信任主机公钥。
+
+使用 Nginx 终止公网 TLS，并代理 Bridge：
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name im.example.com;
+
+    location /ws {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+```
+
+首次 workflow 完成后验证：
+
+```bash
+sudo systemctl status nebulaim-web-bridge.service
+curl -fsS http://127.0.0.1:8080/health
+curl -fsS https://im.example.com/health
+```
 
 ### Bridge HTTP API
 
 Bridge 通过 HTTP 路由暴露后端 gRPC 服务。除了 `GET /health`、`GET /info`、`WS /ws`、`POST /api/auth/register` 和 `POST /api/auth/refresh`，浏览器业务 API 都需要 `Authorization: Bearer <NebulaIM token>`。用户相关路由会从 token 解析当前用户。
+
+AdminService Token 只在 Dashboard 或 Admin 页面输入，并且只保存在当前页面内存中；刷新页面后会清除，不会持久化到浏览器存储。
 
 ```text
 GET  /health
@@ -354,6 +463,9 @@ GET  /api/relation/groups/:groupId/members
 
 GET  /api/conversations
 POST /api/conversations/:conversationId/read  body: {"upToMessageId":"..."}
+DELETE /api/conversations/:conversationId
+POST /api/conversations/:conversationId/pin   body: {"value":true}
+POST /api/conversations/:conversationId/mute  body: {"value":true}
 
 GET  /api/devices
 POST /api/devices/:deviceId/kick

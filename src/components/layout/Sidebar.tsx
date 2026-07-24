@@ -61,8 +61,7 @@ export function Sidebar() {
           variant="ghost"
           className="justify-center lg:justify-start"
           onClick={() => {
-            logout();
-            navigate("/login");
+            void logout().then(() => navigate("/login"));
           }}
         >
           <LogOut className="h-4 w-4" />

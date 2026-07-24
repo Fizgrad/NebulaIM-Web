@@ -37,6 +37,7 @@ export function LoginForm() {
         placeholder={t("auth.username")}
         icon={<UserRound className="h-4 w-4" />}
         autoComplete="username"
+        maxLength={64}
       />
       <Input
         label={t("auth.password")}
@@ -46,6 +47,7 @@ export function LoginForm() {
         placeholder={t("auth.password")}
         icon={<LockKeyhole className="h-4 w-4" />}
         autoComplete="current-password"
+        maxLength={256}
       />
       {error ? <div className="rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
       <Button type="submit" variant="primary" className="w-full" disabled={isLoading}>

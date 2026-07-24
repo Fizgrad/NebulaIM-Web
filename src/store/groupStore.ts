@@ -41,10 +41,6 @@ function requireNumericId(value: string | undefined, message: string) {
   return value;
 }
 
-function isNumericId(value: string | undefined): value is string {
-  return Boolean(value && /^\d+$/.test(value));
-}
-
 async function loadPresence(baseUrl: string, userIds: string[]) {
   try {
     return await getBridgePresence(baseUrl, userIds);
@@ -72,8 +68,8 @@ export const useGroupStore = create<GroupState>((set) => ({
     const settings = useSettingsStore.getState();
     set({ isLoading: true, error: null });
     try {
-      const userId = requireNumericId(useAuthStore.getState().user?.id, tr("store.currentUserNumeric"));
-      const groups = await listBridgeGroups(settings.bridgeHttpUrl, userId);
+      requireNumericId(useAuthStore.getState().user?.id, tr("store.currentUserNumeric"));
+      const groups = await listBridgeGroups(settings.bridgeHttpUrl);
       set({ groups, isLoading: false, error: null });
     } catch (error) {
       set({ isLoading: false, error: error instanceof Error ? error.message : tr("store.failedLoadGroups") });
@@ -110,8 +106,7 @@ export const useGroupStore = create<GroupState>((set) => ({
     }
     set({ isSearching: true, error: null });
     try {
-      const userId = useAuthStore.getState().user?.id;
-      const groups = await searchBridgeGroups(settings.bridgeHttpUrl, keyword, isNumericId(userId) ? userId : undefined);
+      const groups = await searchBridgeGroups(settings.bridgeHttpUrl, keyword);
       set({ groupSearchResults: groups, isSearching: false, error: null });
       return groups;
     } catch (error) {
@@ -152,9 +147,9 @@ export const useGroupStore = create<GroupState>((set) => ({
     const settings = useSettingsStore.getState();
     set({ isLoading: true, error: null });
     try {
-      const userId = requireNumericId(useAuthStore.getState().user?.id, tr("store.currentUserNumeric"));
+      requireNumericId(useAuthStore.getState().user?.id, tr("store.currentUserNumeric"));
       const numericGroupId = requireNumericId(groupId, tr("store.groupIdNumeric"));
-      await leaveBridgeGroup(settings.bridgeHttpUrl, userId, numericGroupId);
+      await leaveBridgeGroup(settings.bridgeHttpUrl, numericGroupId);
       set((state) => ({
         groups: state.groups.filter((item) => item.id !== groupId),
         isLoading: false,
@@ -169,32 +164,26 @@ export const useGroupStore = create<GroupState>((set) => ({
 
 async function createRealGroup(baseUrl: string, name: string): Promise<Group> {
   const currentUser = useAuthStore.getState().user;
-  const ownerId = requireNumericId(currentUser?.id, tr("store.currentUserNumeric"));
-  const response = await createBridgeGroup(baseUrl, ownerId, name);
+  requireNumericId(currentUser?.id, tr("store.currentUserNumeric"));
+  const response = await createBridgeGroup(baseUrl, name);
+  const group = await getBridgeGroup(baseUrl, response.groupId);
   return {
-    id: response.groupId,
-    name,
-    ownerId,
-    memberCount: currentUser ? 1 : 0,
-    members: currentUser ? [currentUser] : [],
-    createdAt: Date.now()
+    ...group,
+    members: currentUser ? [currentUser] : []
   };
 }
 
 async function joinRealGroup(baseUrl: string, groupId: string): Promise<Group> {
-  const userId = requireNumericId(useAuthStore.getState().user?.id, tr("store.currentUserNumeric"));
+  requireNumericId(useAuthStore.getState().user?.id, tr("store.currentUserNumeric"));
   const numericGroupId = requireNumericId(groupId.trim(), tr("store.groupIdNumeric"));
-  await joinBridgeGroup(baseUrl, userId, numericGroupId);
+  await joinBridgeGroup(baseUrl, numericGroupId);
   const [members, groupInfo] = await Promise.all([
     listBridgeGroupMembers(baseUrl, numericGroupId),
-    getBridgeGroup(baseUrl, numericGroupId).catch(() => null)
+    getBridgeGroup(baseUrl, numericGroupId)
   ]);
   return {
-    id: numericGroupId,
-    name: groupInfo?.name ?? `Group ${numericGroupId}`,
-    ownerId: groupInfo?.ownerId ?? "",
-    memberCount: groupInfo?.memberCount ?? members.length,
-    members,
-    createdAt: groupInfo?.createdAt ?? Date.now()
+    ...groupInfo,
+    memberCount: groupInfo.memberCount || members.length,
+    members
   };
 }

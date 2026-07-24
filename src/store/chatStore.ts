@@ -40,7 +40,8 @@ type MessageHistoryState = {
 type MessageHistoryByConversationId = Record<string, MessageHistoryState>;
 
 const resolvedUsers = new Map<string, User>();
-const resolvedGroups = new Map<string, Group>();
+type GroupSummary = Pick<Group, "id" | "name">;
+const resolvedGroups = new Map<string, GroupSummary>();
 const clientSequenceStorageKey = "nebulaim-client-sequence";
 const maxClientSequence = 4_294_967_295;
 let clientSequence = initialClientSequence();
@@ -139,7 +140,7 @@ function knownGroup(groupId?: string) {
   return useGroupStore.getState().groups.find((group) => group.id === groupId) ?? resolvedGroups.get(groupId) ?? null;
 }
 
-function rememberGroup(group: Group) {
+function rememberGroup<T extends GroupSummary>(group: T) {
   resolvedGroups.set(group.id, group);
   return group;
 }
@@ -211,7 +212,7 @@ function applyUserToMessage(message: Message, user: User): Message {
   };
 }
 
-function applyGroupToConversation(conversation: Conversation, group: Group): Conversation {
+function applyGroupToConversation(conversation: Conversation, group: GroupSummary): Conversation {
   if (conversation.type !== "group" || conversation.groupId !== group.id) return conversation;
   return {
     ...conversation,
@@ -234,7 +235,7 @@ function mapBackendConversation(item: BackendConversationInfo, friendById: Map<s
     online: isGroup ? undefined : friend ? friend.status === "online" : false,
     lastMessage: conversationPreviewFromBackend(item.lastMessagePreview),
     lastMessageId: item.lastMessageId,
-    lastMessageAt: Number(item.lastMessageAt || item.updatedAt || Date.now()),
+    lastMessageAt: requiredBackendTimestamp(item.lastMessageAt || item.updatedAt, "conversation timestamp"),
     unreadCount: item.unreadCount,
     pinned: item.pinned,
     muted: item.muted,
@@ -249,6 +250,14 @@ function messageStatusFromBackend(status: number, isMine: boolean): MessageStatu
   if (!isMine) return "delivered";
   if (status === 1) return "sent";
   return "delivered";
+}
+
+function requiredBackendTimestamp(value: number | string | undefined, field: string) {
+  const timestamp = Number(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    throw new Error(`Bridge returned an invalid ${field}.`);
+  }
+  return timestamp;
 }
 
 function messageContentTypeFromBackend(contentType: number): MessageContentType {
@@ -290,7 +299,7 @@ function mapBridgeMessage(item: BridgeMessageInfo, conversationId: string, curre
     content: item.recalled ? tr("store.messageRecalled") : item.content,
     contentType: item.recalled ? "text" : messageContentTypeFromBackend(item.contentType),
     status: messageStatusFromBackend(item.status, isMine),
-    createdAt: Number(item.createdAt || Date.now()),
+    createdAt: requiredBackendTimestamp(item.createdAt, "message timestamp"),
     isMine,
     recalled: item.recalled,
     recalledAt: Number(item.recalledAt ?? 0)
@@ -329,14 +338,14 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
     if (!isNumericId(conversation.groupId)) {
       throw new Error(tr("store.groupIdNumeric"));
     }
-    const result = await sendBridgeGroupMessage(settings.bridgeHttpUrl, userId, conversation.groupId, message.content, sequenceId, message.contentType);
+    const result = await sendBridgeGroupMessage(settings.bridgeHttpUrl, conversation.groupId, message.content, sequenceId, message.contentType);
     updateStatus("sent");
     return result;
   } else {
     if (!isNumericId(conversation.targetUserId)) {
       throw new Error(tr("store.recipientNumeric"));
     }
-    const result = await sendBridgeSingleMessage(settings.bridgeHttpUrl, userId, conversation.targetUserId, message.content, sequenceId, message.contentType);
+    const result = await sendBridgeSingleMessage(settings.bridgeHttpUrl, conversation.targetUserId, message.content, sequenceId, message.contentType);
     updateStatus("sent");
     return result;
   }
@@ -377,17 +386,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const settings = useSettingsStore.getState();
     const userId = useAuthStore.getState().user?.id;
     if (!isNumericId(userId)) return;
-    const conversations = await listBridgeConversations(settings.bridgeHttpUrl, userId);
+    const conversations = await listBridgeConversations(settings.bridgeHttpUrl);
     conversations.forEach((item) => {
       const groupId = item.groupId && item.groupId !== "0" ? item.groupId : undefined;
       if (groupId && item.groupName) {
         rememberGroup({
           id: groupId,
-          name: item.groupName,
-          ownerId: "",
-          memberCount: 0,
-          members: [],
-          createdAt: Number(item.updatedAt || Date.now())
+          name: item.groupName
         });
       }
     });
@@ -467,7 +472,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const userId = useAuthStore.getState().user?.id;
     if (!conversation?.backendConversationId || !isNumericId(userId)) return;
 
-    const history = await listBridgeConversationMessages(settings.bridgeHttpUrl, userId, conversation.backendConversationId);
+    const history = await listBridgeConversationMessages(settings.bridgeHttpUrl, conversation.backendConversationId);
     const messages = history.messages.map((item) => mapBridgeMessage(item, conversation.id, userId));
     set((state) => ({
       messagesByConversationId: {
@@ -539,7 +544,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const history = await listBridgeConversationMessages(
         settings.bridgeHttpUrl,
-        userId,
         conversation.backendConversationId,
         historyState.nextCursor.before,
         50,
@@ -865,7 +869,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
     }
     if (message.groupId) {
-      const applyResolvedGroup = (resolvedGroup: Group) => {
+      const applyResolvedGroup = (resolvedGroup: GroupSummary) => {
         set((state) => ({ conversations: state.conversations.map((conversation) => applyGroupToConversation(conversation, resolvedGroup)) }));
       };
       if (group) {
@@ -911,7 +915,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         .find((message) => !message.id.startsWith("local_") && isNumericId(message.id))?.id;
     if (conversation?.backendConversationId && isNumericId(userId)) {
       if (!readCursor) return;
-      await markBridgeConversationRead(settings.bridgeHttpUrl, userId, conversation.backendConversationId, readCursor);
+      await markBridgeConversationRead(settings.bridgeHttpUrl, conversation.backendConversationId, readCursor);
     }
     set((state) => ({
       conversations: state.conversations.map((item) =>
@@ -976,7 +980,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setGatewayStatus: (gatewayStatus) => {
     set({ gatewayStatus });
     if (gatewayStatus.sessionExpired) {
-      useAuthStore.getState().logout();
+      void useAuthStore.getState().logout(false);
       get().clearLocalChat();
     }
   },
@@ -984,7 +988,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const gateway = getGatewayClient();
     const auth = useAuthStore.getState();
     if (!auth.token || !auth.user?.id) {
-      auth.logout();
+      await auth.logout(false);
       throw new Error(tr("store.sessionExpired"));
     }
     gateway.setSession(auth.token, auth.user.id);
@@ -994,7 +998,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       await gateway.connect();
     } catch (error) {
       if (isExpiredGatewaySession(error)) {
-        useAuthStore.getState().logout();
+        await useAuthStore.getState().logout(false);
       }
       throw error;
     }

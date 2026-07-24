@@ -11,8 +11,10 @@ import { useI18n } from "../i18n";
 export function ProfilePage() {
   const user = useAuthStore((state) => state.user);
   const token = useAuthStore((state) => state.token);
-  const gatewayConnected = useChatStore((state) => state.gatewayStatus.state === "connected");
+  const gatewayStatus = useChatStore((state) => state.gatewayStatus);
+  const gatewayConnected = gatewayStatus.state === "connected";
   const { t, locale } = useI18n();
+  const unavailable = t("common.unavailable");
 
   return (
     <PageContainer title={t("profile.title")} subtitle={t("profile.subtitle")}>
@@ -24,19 +26,18 @@ export function ProfilePage() {
               <h2 className="text-xl font-semibold text-nebula-text">{user?.nickname ?? t("sidebar.nebulaOperator")}</h2>
               <Badge tone={gatewayConnected ? "emerald" : "slate"}>{gatewayConnected ? t("common.online") : t("common.offline")}</Badge>
             </div>
-            <p className="mt-2 text-sm text-nebula-muted">@{user?.username ?? "demo"}</p>
+            {user?.username ? <p className="mt-2 text-sm text-nebula-muted">@{user.username}</p> : null}
           </div>
         </div>
 
         <div className="mt-7 grid gap-3 md:grid-cols-2">
           {[
-            [t("profile.userId"), user?.id ?? "u-current"],
-            [t("profile.username"), user?.username ?? "demo"],
-            [t("profile.nickname"), user?.nickname ?? t("sidebar.nebulaOperator")],
-            [t("profile.registered"), formatMessageTime(user?.registeredAt ?? Date.now(), locale)],
-            [t("profile.gateway"), user?.gateway ?? "gateway-shanghai-01:9000"],
-            [t("profile.connectionId"), user?.connectionId ?? "conn_7f3a9c2e"],
-            [t("profile.token"), maskToken(token)]
+            [t("profile.userId"), user?.id ?? unavailable],
+            [t("profile.username"), user?.username || unavailable],
+            [t("profile.nickname"), user?.nickname || unavailable],
+            [t("profile.registered"), user?.registeredAt ? formatMessageTime(user.registeredAt, locale) : unavailable],
+            [t("profile.gateway"), gatewayStatus.gatewayUrl ?? unavailable],
+            [t("profile.token"), token ? maskToken(token) : unavailable]
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg border border-nebula-border bg-white/[0.04] p-4">
               <p className="text-xs uppercase tracking-[0.14em] text-nebula-muted">{label}</p>

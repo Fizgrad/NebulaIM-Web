@@ -7,7 +7,5 @@ export type User = {
   avatar?: string;
   avatarColor: string;
   status: UserStatus;
-  registeredAt: number;
-  gateway: string;
-  connectionId: string;
+  registeredAt?: number;
 };

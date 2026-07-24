@@ -237,7 +237,7 @@ export async function refreshBridgeToken(baseUrl: string, token: string, deviceI
           token,
           deviceId
         }),
-      { retries: 1 }
+      { retries: 0 }
     )
   );
   return {
@@ -255,7 +255,7 @@ export async function registerBridgeUser(baseUrl: string, username: string, pass
           password,
           nickname
         }),
-      { retries: 1 }
+      { retries: 0 }
     )
   );
 }
@@ -274,9 +274,7 @@ export async function getBridgeUserInfo(baseUrl: string, userId: string): Promis
     avatar: user.avatar || undefined,
     avatarColor: "from-cyan-500 to-blue-500",
     status: "offline",
-    registeredAt: Number(user.createdAt ?? Date.now()),
-    gateway: "UserService",
-    connectionId: `user-${user.userId}`
+    registeredAt: optionalTimestamp(user.createdAt)
   };
 }
 
@@ -295,14 +293,11 @@ export async function getBridgeUserByUsername(baseUrl: string, username: string)
     avatar: user.avatar || undefined,
     avatarColor: "from-cyan-500 to-blue-500",
     status: "offline",
-    registeredAt: Number(user.createdAt ?? Date.now()),
-    gateway: "UserService",
-    connectionId: `user-${user.userId}`
+    registeredAt: optionalTimestamp(user.createdAt)
   };
 }
 
-export async function listBridgeFriends(baseUrl: string, userId: string): Promise<User[]> {
-  void userId;
+export async function listBridgeFriends(baseUrl: string): Promise<User[]> {
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () => httpClient.get<ListBridgeFriendsResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/friends`),
@@ -327,8 +322,7 @@ export async function getBridgePresence(baseUrl: string, userIds: string[]): Pro
   return Object.fromEntries((response.users ?? []).map((user) => [user.userId, Boolean(user.online)]));
 }
 
-export async function listBridgeDevices(baseUrl: string, userId: string): Promise<BridgeDeviceInfo[]> {
-  void userId;
+export async function listBridgeDevices(baseUrl: string): Promise<BridgeDeviceInfo[]> {
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () => httpClient.get<ListBridgeDevicesResponse>(`${baseUrl.replace(/\/$/, "")}/api/devices`),
@@ -338,8 +332,7 @@ export async function listBridgeDevices(baseUrl: string, userId: string): Promis
   return response.devices ?? [];
 }
 
-export async function kickBridgeDevice(baseUrl: string, userId: string, deviceId: string): Promise<void> {
-  void userId;
+export async function kickBridgeDevice(baseUrl: string, deviceId: string): Promise<void> {
   await bridgeRequest(() =>
     requestWithRetry(
       () => httpClient.post<CommonDeviceResponse>(`${baseUrl.replace(/\/$/, "")}/api/devices/${encodeURIComponent(deviceId)}/kick`),
@@ -348,8 +341,7 @@ export async function kickBridgeDevice(baseUrl: string, userId: string, deviceId
   );
 }
 
-export async function kickAllBridgeDevices(baseUrl: string, userId: string): Promise<void> {
-  void userId;
+export async function kickAllBridgeDevices(baseUrl: string): Promise<void> {
   await bridgeRequest(() =>
     requestWithRetry(
       () => httpClient.post<CommonDeviceResponse>(`${baseUrl.replace(/\/$/, "")}/api/devices/kick-all`),
@@ -358,8 +350,7 @@ export async function kickAllBridgeDevices(baseUrl: string, userId: string): Pro
   );
 }
 
-export async function sendBridgeFriendRequest(baseUrl: string, fromUserId: string, toUserId: string, message = "") {
-  void fromUserId;
+export async function sendBridgeFriendRequest(baseUrl: string, toUserId: string, message = "") {
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () =>
@@ -367,7 +358,7 @@ export async function sendBridgeFriendRequest(baseUrl: string, fromUserId: strin
           toUserId,
           message
         }),
-      { retries: 1 }
+      { retries: 0 }
     )
   );
   return {
@@ -378,11 +369,9 @@ export async function sendBridgeFriendRequest(baseUrl: string, fromUserId: strin
 
 export async function listBridgeFriendRequests(
   baseUrl: string,
-  userId: string,
   incoming: boolean,
   status: BridgeFriendRequestStatus = 0
 ): Promise<BridgeFriendRequest[]> {
-  void userId;
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () =>
@@ -395,47 +384,43 @@ export async function listBridgeFriendRequests(
   return (response.requests ?? []).map(toFriendRequest);
 }
 
-export async function acceptBridgeFriendRequest(baseUrl: string, userId: string, friendRequestId: string): Promise<void> {
-  void userId;
+export async function acceptBridgeFriendRequest(baseUrl: string, friendRequestId: string): Promise<void> {
   await bridgeRequest(() =>
     requestWithRetry(
       () =>
         httpClient.post<CommonRelationResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/friend-requests/${friendRequestId}/accept`),
-      { retries: 1 }
+      { retries: 0 }
     )
   );
 }
 
-export async function rejectBridgeFriendRequest(baseUrl: string, userId: string, friendRequestId: string): Promise<void> {
-  void userId;
+export async function rejectBridgeFriendRequest(baseUrl: string, friendRequestId: string): Promise<void> {
   await bridgeRequest(() =>
     requestWithRetry(
       () =>
         httpClient.post<CommonRelationResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/friend-requests/${friendRequestId}/reject`),
-      { retries: 1 }
+      { retries: 0 }
     )
   );
 }
 
-export async function deleteBridgeFriend(baseUrl: string, userId: string, friendId: string): Promise<void> {
-  void userId;
+export async function deleteBridgeFriend(baseUrl: string, friendId: string): Promise<void> {
   await bridgeRequest(() =>
     requestWithRetry(
       () => httpClient.delete<CommonRelationResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/friends/${friendId}`),
-      { retries: 1 }
+      { retries: 0 }
     )
   );
 }
 
-export async function createBridgeGroup(baseUrl: string, ownerId: string, name: string) {
-  void ownerId;
+export async function createBridgeGroup(baseUrl: string, name: string) {
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () =>
         httpClient.post<CreateBridgeGroupResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups`, {
           name
         }),
-      { retries: 1 }
+      { retries: 0 }
     )
   );
   return {
@@ -454,8 +439,7 @@ export async function getBridgeGroup(baseUrl: string, groupId: string): Promise<
   return toGroup(response.group);
 }
 
-export async function listBridgeGroups(baseUrl: string, userId: string): Promise<Group[]> {
-  void userId;
+export async function listBridgeGroups(baseUrl: string): Promise<Group[]> {
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () => httpClient.get<ListBridgeGroupsResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups`),
@@ -465,8 +449,7 @@ export async function listBridgeGroups(baseUrl: string, userId: string): Promise
   return (response.groups ?? []).map(toGroup);
 }
 
-export async function searchBridgeGroups(baseUrl: string, query: string, userId?: string): Promise<Group[]> {
-  void userId;
+export async function searchBridgeGroups(baseUrl: string, query: string): Promise<Group[]> {
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () =>
@@ -479,22 +462,20 @@ export async function searchBridgeGroups(baseUrl: string, query: string, userId?
   return (response.groups ?? []).map(toGroup);
 }
 
-export async function joinBridgeGroup(baseUrl: string, userId: string, groupId: string): Promise<void> {
-  void userId;
+export async function joinBridgeGroup(baseUrl: string, groupId: string): Promise<void> {
   await bridgeRequest(() =>
     requestWithRetry(
       () => httpClient.post<CommonRelationResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups/${groupId}/join`),
-      { retries: 1 }
+      { retries: 0 }
     )
   );
 }
 
-export async function leaveBridgeGroup(baseUrl: string, userId: string, groupId: string): Promise<void> {
-  void userId;
+export async function leaveBridgeGroup(baseUrl: string, groupId: string): Promise<void> {
   await bridgeRequest(() =>
     requestWithRetry(
       () => httpClient.post<CommonRelationResponse>(`${baseUrl.replace(/\/$/, "")}/api/relation/groups/${groupId}/leave`),
-      { retries: 1 }
+      { retries: 0 }
     )
   );
 }
@@ -509,8 +490,7 @@ export async function listBridgeGroupMembers(baseUrl: string, groupId: string): 
   return response.members.map(toUser);
 }
 
-export async function listBridgeConversations(baseUrl: string, userId: string, page = 1, pageSize = 50) {
-  void userId;
+export async function listBridgeConversations(baseUrl: string, page = 1, pageSize = 50) {
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () =>
@@ -525,11 +505,9 @@ export async function listBridgeConversations(baseUrl: string, userId: string, p
 
 export async function markBridgeConversationRead(
   baseUrl: string,
-  userId: string,
   conversationId: string,
   upToMessageId: string
 ): Promise<void> {
-  void userId;
   await bridgeRequest(() =>
     requestWithRetry(
       () =>
@@ -543,13 +521,11 @@ export async function markBridgeConversationRead(
 
 export async function listBridgeConversationMessages(
   baseUrl: string,
-  userId: string,
   conversationId: string,
   before?: number,
   limit = 50,
   beforeMessageId?: string
 ): Promise<BridgeMessageHistoryPage> {
-  void userId;
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () =>
@@ -613,7 +589,7 @@ export async function uploadBridgeImage(baseUrl: string, dataUrl: string, fileNa
           dataUrl,
           fileName
         }),
-      { retries: 1 }
+      { retries: 0 }
     )
   );
   return {
@@ -626,13 +602,11 @@ export async function uploadBridgeImage(baseUrl: string, dataUrl: string, fileNa
 
 export async function sendBridgeSingleMessage(
   baseUrl: string,
-  fromUserId: string,
   toUserId: string,
   content: string,
   clientSequenceId: number,
   contentType: MessageContentType = "text"
 ) {
-  void fromUserId;
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () =>
@@ -647,20 +621,18 @@ export async function sendBridgeSingleMessage(
   );
   return {
     messageId: response.messageId,
-    serverTimestamp: Number(response.serverTimestamp || Date.now()),
+    serverTimestamp: requiredTimestamp(response.serverTimestamp, "single-message server timestamp"),
     response: response.response
   };
 }
 
 export async function sendBridgeGroupMessage(
   baseUrl: string,
-  fromUserId: string,
   groupId: string,
   content: string,
   clientSequenceId: number,
   contentType: MessageContentType = "text"
 ) {
-  void fromUserId;
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () =>
@@ -675,7 +647,7 @@ export async function sendBridgeGroupMessage(
   );
   return {
     messageId: response.messageId,
-    serverTimestamp: Number(response.serverTimestamp || Date.now()),
+    serverTimestamp: requiredTimestamp(response.serverTimestamp, "group-message server timestamp"),
     response: response.response
   };
 }
@@ -688,10 +660,22 @@ function toUser(user: RelationUserInfo): User {
     avatar: user.avatar || undefined,
     avatarColor: "from-cyan-500 to-blue-500",
     status: "offline",
-    registeredAt: Number(user.createdAt ?? Date.now()),
-    gateway: "RelationService",
-    connectionId: `user-${user.userId}`
+    registeredAt: optionalTimestamp(user.createdAt)
   };
+}
+
+function optionalTimestamp(value: number | string | undefined) {
+  if (value === undefined) return undefined;
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : undefined;
+}
+
+function requiredTimestamp(value: number | string | undefined, field: string) {
+  const timestamp = optionalTimestamp(value);
+  if (timestamp === undefined) {
+    throw new Error(`Bridge returned an invalid ${field}.`);
+  }
+  return timestamp;
 }
 
 function toGroup(group: BridgeGroupInfo): Group {
@@ -701,7 +685,7 @@ function toGroup(group: BridgeGroupInfo): Group {
     ownerId: group.ownerId,
     memberCount: Number(group.memberCount ?? 0),
     members: [],
-    createdAt: Number(group.createdAt ?? Date.now())
+    createdAt: requiredTimestamp(group.createdAt, "group creation timestamp")
   };
 }
 
@@ -712,8 +696,8 @@ function toFriendRequest(request: RawFriendRequest): BridgeFriendRequest {
     toUserId: request.toUserId,
     message: request.message ?? "",
     status: normalizeFriendRequestStatus(request.status),
-    createdAt: Number(request.createdAt ?? Date.now()),
-    updatedAt: Number(request.updatedAt ?? request.createdAt ?? Date.now())
+    createdAt: requiredTimestamp(request.createdAt, "friend-request creation timestamp"),
+    updatedAt: requiredTimestamp(request.updatedAt ?? request.createdAt, "friend-request update timestamp")
   };
 }
 

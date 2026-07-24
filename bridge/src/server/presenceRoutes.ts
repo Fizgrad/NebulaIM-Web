@@ -9,6 +9,7 @@ import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
 import { internalMetadata } from "./grpcMetadata.js";
 import { grpcChannelCredentials, grpcChannelOptions } from "./grpcCredentials.js";
+import { numericIdSchema } from "./validation.js";
 
 type CommonResponse = {
   code: number;
@@ -46,8 +47,6 @@ type GatewayServiceConstructor = new (
   credentials: grpc.ChannelCredentials,
   options?: grpc.ChannelOptions
 ) => GatewayGrpcClient;
-
-const numericIdSchema = z.string().regex(/^\d+$/, "User ID must be numeric.");
 
 const presenceQuerySchema = z.object({
   userIds: z

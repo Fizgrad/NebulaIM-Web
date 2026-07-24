@@ -159,7 +159,7 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
                 />
                 <MetricCard
                   label={t("dashboard.outboxPublishRate")}
-                  value={formatPercent(runtime.outboxPublishRate)}
+                  value={runtime.outboxPublishRate === null ? t("common.unavailable") : formatPercent(runtime.outboxPublishRate)}
                   hint={t("dashboard.publishRateHint")}
                   icon={TrendingUp}
                 />

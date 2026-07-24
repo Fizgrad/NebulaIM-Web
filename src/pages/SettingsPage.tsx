@@ -68,7 +68,7 @@ export function SettingsPage() {
     setDevicesLoading(true);
     setDevicesError("");
     try {
-      const result = await listBridgeDevices(settings.bridgeHttpUrl, user.id);
+      const result = await listBridgeDevices(settings.bridgeHttpUrl);
       setDevices(result);
     } catch (error) {
       setDevicesError(error instanceof Error ? error.message : t("settings.devicesFailed"));
@@ -81,8 +81,8 @@ export function SettingsPage() {
     void loadDevices();
   }, [loadDevices]);
 
-  function handleLogout() {
-    logout();
+  async function handleLogout(revokeRemote = true) {
+    await logout(revokeRemote);
     navigate("/login");
   }
 
@@ -109,9 +109,9 @@ export function SettingsPage() {
     setDeviceAction(deviceId);
     setDevicesError("");
     try {
-      await kickBridgeDevice(settings.bridgeHttpUrl, user.id, deviceId);
+      await kickBridgeDevice(settings.bridgeHttpUrl, deviceId);
       if (deviceId === currentDeviceId()) {
-        handleLogout();
+        await handleLogout(false);
         return;
       }
       await loadDevices();
@@ -127,8 +127,8 @@ export function SettingsPage() {
     setDeviceAction("all");
     setDevicesError("");
     try {
-      await kickAllBridgeDevices(settings.bridgeHttpUrl, user.id);
-      handleLogout();
+      await kickAllBridgeDevices(settings.bridgeHttpUrl);
+      await handleLogout(false);
     } catch (error) {
       setDevicesError(error instanceof Error ? error.message : t("settings.deviceActionFailed"));
     } finally {
@@ -250,6 +250,7 @@ export function SettingsPage() {
               ) : null}
               {devices.map((device) => {
                 const isCurrent = device.deviceId === currentDeviceId();
+                const lastActiveAt = Number(device.lastActiveAt || device.lastLoginAt);
                 return (
                   <div key={device.deviceId} className="rounded-lg border border-nebula-border bg-white/[0.04] p-3">
                     <div className="flex items-start justify-between gap-3">
@@ -263,10 +264,12 @@ export function SettingsPage() {
                           ) : null}
                         </div>
                         <p className="mt-1 truncate text-xs text-nebula-muted">
-                          {device.platform || "web"} - {device.deviceId}
+                          {device.platform || t("common.unavailable")} - {device.deviceId}
                         </p>
                         <p className="mt-1 text-xs text-nebula-muted">
-                          {formatRelativeTime(Number(device.lastActiveAt || device.lastLoginAt || Date.now()), language)}
+                          {Number.isFinite(lastActiveAt) && lastActiveAt > 0
+                            ? formatRelativeTime(lastActiveAt, language)
+                            : t("common.unavailable")}
                         </p>
                       </div>
                       <span
@@ -343,7 +346,7 @@ export function SettingsPage() {
               <Trash2 className="h-4 w-4" />
               {t("settings.clearLocalData")}
             </Button>
-            <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
+            <Button variant="ghost" className="w-full justify-start" onClick={() => void handleLogout()}>
               <LogOut className="h-4 w-4" />
               {t("common.logout")}
             </Button>

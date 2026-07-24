@@ -11,19 +11,19 @@ import {
   statusForUserCode,
   userCodeToString
 } from "./userServiceClient.js";
+import { deviceIdSchema, numericIdSchema } from "./validation.js";
 
 const registerSchema = z.object({
-  username: z.string().trim().min(1, "Username is required."),
-  password: z.string().min(6, "Password must be at least 6 characters."),
-  nickname: z.string().trim().optional().default("")
+  username: z.string().trim().min(1, "Username is required.").max(64, "Username is too long."),
+  password: z.string().min(6, "Password must be at least 6 characters.").max(256, "Password is too long."),
+  nickname: z.string().trim().max(64, "Nickname is too long.").optional().default("")
 });
 
 const refreshSchema = z.object({
-  token: z.string().min(1, "Token is required."),
-  deviceId: z.string().trim().min(1, "Device ID is required.")
+  token: z.string().min(1, "Token is required.").max(256, "Token is too long."),
+  deviceId: deviceIdSchema
 });
 
-const userIdSchema = z.string().regex(/^\d+$/, "User ID must be numeric.");
 const usernameParamSchema = z.string().trim().min(1, "Username is required.").max(64, "Username is too long.");
 
 export function createAuthRouter(): Router {
@@ -77,7 +77,7 @@ export function createAuthRouter(): Router {
   });
 
   router.get("/users/:userId", async (req, res) => {
-    const parsed = userIdSchema.safeParse(req.params.userId);
+    const parsed = numericIdSchema.safeParse(req.params.userId);
     if (!parsed.success) {
       res.status(400).json({
         ok: false,

@@ -11,10 +11,7 @@ async function authenticate(page: Page) {
             username: "e2e",
             nickname: "E2E",
             avatarColor: "from-violet-500 to-cyan-400",
-            status: "online",
-            registeredAt: 0,
-            gateway: "/ws",
-            connectionId: "gateway-10001"
+            status: "online"
           },
           token: "e2e-token",
           tokenExpireAt: Date.now() + 3600_000,
@@ -139,6 +136,33 @@ test("gateway connection rejects when the socket closes before opening", async (
   });
 
   expect(result).toBe("rejected");
+});
+
+test("automatic gateway reconnect does not create an unhandled rejection", async ({ page }) => {
+  await page.goto("/login");
+
+  const unhandledReason = await page.evaluate(async () => {
+    let reason = "";
+    const onUnhandled = (event: PromiseRejectionEvent) => {
+      event.preventDefault();
+      reason = event.reason instanceof Error ? event.reason.message : String(event.reason);
+    };
+    window.addEventListener("unhandledrejection", onUnhandled);
+
+    const { DirectGatewayClient } = await import("/src/services/directGatewayClient.ts");
+    const client = new DirectGatewayClient({
+      wsUrl: "ws://127.0.0.1:65534/ws",
+      autoReconnect: true,
+      heartbeatIntervalMs: 15_000
+    });
+    await client.connect().catch(() => undefined);
+    await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+    client.disconnect();
+    window.removeEventListener("unhandledrejection", onUnhandled);
+    return reason;
+  });
+
+  expect(unhandledReason).toBe("");
 });
 
 test("chat loads older history with the composite cursor", async ({ page }) => {

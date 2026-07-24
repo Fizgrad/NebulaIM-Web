@@ -49,6 +49,7 @@ export function RegisterForm() {
         placeholder="nebula"
         icon={<UserRound className="h-4 w-4" />}
         autoComplete="username"
+        maxLength={64}
       />
       <Input
         label={t("auth.nickname")}
@@ -56,6 +57,7 @@ export function RegisterForm() {
         onChange={(event) => setNickname(event.target.value)}
         placeholder="Nebula Operator"
         icon={<Sparkles className="h-4 w-4" />}
+        maxLength={64}
       />
       <Input
         label={t("auth.password")}
@@ -64,6 +66,7 @@ export function RegisterForm() {
         onChange={(event) => setPassword(event.target.value)}
         icon={<LockKeyhole className="h-4 w-4" />}
         autoComplete="new-password"
+        maxLength={256}
       />
       <Input
         label={t("auth.confirmPassword")}
@@ -72,6 +75,7 @@ export function RegisterForm() {
         onChange={(event) => setConfirmPassword(event.target.value)}
         icon={<LockKeyhole className="h-4 w-4" />}
         autoComplete="new-password"
+        maxLength={256}
       />
       {localError || error ? (
         <div className="rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">

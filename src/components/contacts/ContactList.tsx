@@ -110,6 +110,7 @@ export function ContactList({ onMessage }: ContactListProps) {
                 value={friendIdentifier}
                 onChange={(event) => setFriendIdentifier(event.target.value)}
                 placeholder={t("contacts.identifierPlaceholder")}
+                maxLength={64}
               />
               <Input
                 label={t("contacts.requestMessage")}

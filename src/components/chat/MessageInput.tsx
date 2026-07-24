@@ -131,6 +131,7 @@ export function MessageInput({ disabled, onSend, onSendImage }: MessageInputProp
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
+            maxLength={4096}
             placeholder={t("chat.typeMessage")}
             className="max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-sm text-nebula-text outline-none placeholder:text-slate-500"
           />
