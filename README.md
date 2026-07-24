@@ -105,15 +105,13 @@ cd bridge && npm run build
 
 ### GitHub Pages Build
 
-The Pages workflow builds the static client with:
+The Pages workflow builds the static client with the production Bridge HTTPS and Gateway WSS endpoints declared in `.github/workflows/pages.yml`. The repository path defaults to:
 
 ```text
 PAGES_BASE_PATH=/NebulaIM-Web/
-PAGES_BRIDGE_HTTP_URL=https://<bridge-host>
-PAGES_GATEWAY_WS_URL=wss://<bridge-host>/ws
 ```
 
-In GitHub, set **Settings -> Pages -> Build and deployment -> Source** to **GitHub Actions**. Then add `PAGES_BRIDGE_HTTP_URL` and `PAGES_GATEWAY_WS_URL` under **Settings -> Secrets and variables -> Actions -> Variables**. Add `PAGES_BASE_PATH` only when the repository path differs from `/NebulaIM-Web/`. The Bridge must allow the Pages origin in `CORS_ORIGIN`.
+In GitHub, set **Settings -> Pages -> Build and deployment -> Source** to **GitHub Actions**. Add `PAGES_BASE_PATH` under **Settings -> Secrets and variables -> Actions -> Variables** only when the repository path differs from `/NebulaIM-Web/`. To move Pages to another backend, update `VITE_BRIDGE_HTTP_URL` and `VITE_GATEWAY_WS_URL` in the Pages workflow together. The Bridge must allow the Pages origin in `CORS_ORIGIN`.
 
 The app includes a `404.html` single-page fallback so direct links such as `/NebulaIM-Web/login` route correctly on GitHub Pages. Proto assets are loaded relative to `import.meta.env.BASE_URL`, so Pages sub-path deployment uses `/NebulaIM-Web/proto/*.proto`.
 
@@ -358,15 +356,13 @@ cd bridge && npm run build
 
 ### GitHub Pages 构建
 
-Pages workflow 使用以下变量构建静态客户端：
+Pages workflow 使用 `.github/workflows/pages.yml` 中声明的生产 Bridge HTTPS 和 Gateway WSS 地址构建静态客户端。仓库路径默认值为：
 
 ```text
 PAGES_BASE_PATH=/NebulaIM-Web/
-PAGES_BRIDGE_HTTP_URL=https://<bridge-host>
-PAGES_GATEWAY_WS_URL=wss://<bridge-host>/ws
 ```
 
-在 GitHub 的 **Settings -> Pages -> Build and deployment -> Source** 中选择 **GitHub Actions**，再到 **Settings -> Secrets and variables -> Actions -> Variables** 添加 `PAGES_BRIDGE_HTTP_URL` 和 `PAGES_GATEWAY_WS_URL`。只有仓库路径不是 `/NebulaIM-Web/` 时才需要设置 `PAGES_BASE_PATH`。Bridge 的 `CORS_ORIGIN` 必须允许 Pages 的来源。
+在 GitHub 的 **Settings -> Pages -> Build and deployment -> Source** 中选择 **GitHub Actions**。只有仓库路径不是 `/NebulaIM-Web/` 时，才需要在 **Settings -> Secrets and variables -> Actions -> Variables** 中设置 `PAGES_BASE_PATH`。Pages 切换到其他后端时，应同时修改 workflow 中的 `VITE_BRIDGE_HTTP_URL` 和 `VITE_GATEWAY_WS_URL`。Bridge 的 `CORS_ORIGIN` 必须允许 Pages 的来源。
 
 应用包含 `404.html` 单页 fallback，因此 `/NebulaIM-Web/login` 这种直接访问链接可以在 GitHub Pages 上正确路由。Proto 资源基于 `import.meta.env.BASE_URL` 加载，所以 Pages 子路径部署会请求 `/NebulaIM-Web/proto/*.proto`。
 

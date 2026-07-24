@@ -18,8 +18,8 @@ permissions:
 env:
   NODE_VERSION: "22"
   PAGES_BASE_PATH: ${{ vars.PAGES_BASE_PATH || '/NebulaIM-Web/' }}
-  VITE_BRIDGE_HTTP_URL: ${{ vars.PAGES_BRIDGE_HTTP_URL }}
-  VITE_GATEWAY_WS_URL: ${{ vars.PAGES_GATEWAY_WS_URL }}
+  VITE_BRIDGE_HTTP_URL: https://129.211.217.163
+  VITE_GATEWAY_WS_URL: wss://129.211.217.163/ws
 
 jobs:
   build:
@@ -41,25 +41,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${VITE_BRIDGE_HTTP_URL}" ]; then
-            echo "Missing repository variable: PAGES_BRIDGE_HTTP_URL" >&2
-            exit 1
-          fi
-          if [ -z "${VITE_GATEWAY_WS_URL}" ]; then
-            echo "Missing repository variable: PAGES_GATEWAY_WS_URL" >&2
-            exit 1
-          fi
           case "${VITE_BRIDGE_HTTP_URL}" in
             https://*) ;;
             *)
-              echo "PAGES_BRIDGE_HTTP_URL must start with https:// for GitHub Pages." >&2
+              echo "VITE_BRIDGE_HTTP_URL must start with https:// for GitHub Pages." >&2
               exit 1
               ;;
           esac
           case "${VITE_GATEWAY_WS_URL}" in
             wss://*) ;;
             *)
-              echo "PAGES_GATEWAY_WS_URL must start with wss:// for GitHub Pages." >&2
+              echo "VITE_GATEWAY_WS_URL must start with wss:// for GitHub Pages." >&2
               exit 1
               ;;
           esac
