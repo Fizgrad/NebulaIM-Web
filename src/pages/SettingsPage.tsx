@@ -97,7 +97,12 @@ export function SettingsPage() {
     try {
       const result = await testBridgeConnection(settings.bridgeHttpUrl);
       setTestState("success");
-      setTestMessage(`${result.info.name} -> ${result.info.gateway}`);
+      setTestMessage(
+        t("settings.bridgeConnected", {
+          service: result.info.name,
+          url: settings.bridgeHttpUrl
+        })
+      );
     } catch (error) {
       setTestState("error");
       setTestMessage(error instanceof Error ? error.message : t("settings.bridgeFailed"));

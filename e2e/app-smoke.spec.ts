@@ -43,6 +43,25 @@ test("settings page shows Bridge HTTP and Gateway WebSocket defaults", async ({ 
   await expect(page.getByLabel("Bridge HTTP URL")).toHaveValue("http://127.0.0.1:8080");
 });
 
+test("Bridge connection test reports the service and URL without undefined fields", async ({ page }) => {
+  await authenticate(page);
+  await page.route("**/api/devices", async (route) => {
+    await route.fulfill({ json: { devices: [] } });
+  });
+  await page.route("**/health", async (route) => {
+    await route.fulfill({ json: { ok: true, service: "nebulaim-web-bridge" } });
+  });
+  await page.route("**/info", async (route) => {
+    await route.fulfill({ json: { name: "nebulaim-web-bridge", websocket: "/ws" } });
+  });
+
+  await page.goto("/app/settings");
+  await page.getByRole("button", { name: "Test Bridge" }).click();
+
+  await expect(page.getByText("Connected to nebulaim-web-bridge at http://127.0.0.1:8080.")).toBeVisible();
+  await expect(page.getByText(/undefined/)).toHaveCount(0);
+});
+
 test("system tools stay out of the primary client navigation", async ({ page }) => {
   await authenticate(page);
 

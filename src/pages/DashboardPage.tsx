@@ -1,10 +1,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Activity, ArrowLeft, Database, KeyRound, Link2, Radio, RefreshCw, Server, Shield, TrendingUp } from "lucide-react";
-import type { BridgeHealth, BridgeInfo } from "../types/bridge";
+import type { BridgeHealth } from "../types/bridge";
 import type { DashboardRuntime } from "../api/dashboardApi";
 import { getDashboardRuntime } from "../api/dashboardApi";
-import { getBridgeHealth, getBridgeInfo } from "../api/bridgeApi";
+import { getBridgeHealth } from "../api/bridgeApi";
 import { Logo } from "../components/brand/Logo";
 import { NebulaBackground } from "../components/brand/NebulaBackground";
 import { Button } from "../components/common/Button";
@@ -32,7 +32,6 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
   const [runtimeError, setRuntimeError] = useState("");
   const [isRuntimeLoading, setIsRuntimeLoading] = useState(false);
   const [bridgeHealth, setBridgeHealth] = useState<BridgeHealth | null>(null);
-  const [bridgeInfo, setBridgeInfo] = useState<BridgeInfo | null>(null);
   const [bridgeError, setBridgeError] = useState("");
   const settings = useSettingsStore();
   const { t, locale } = useI18n();
@@ -69,16 +68,14 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
   useEffect(() => {
     let mounted = true;
     setBridgeError("");
-    Promise.all([getBridgeHealth(settings.bridgeHttpUrl), getBridgeInfo(settings.bridgeHttpUrl)])
-      .then(([healthResponse, infoResponse]) => {
+    getBridgeHealth(settings.bridgeHttpUrl)
+      .then((healthResponse) => {
         if (!mounted) return;
         setBridgeHealth(healthResponse);
-        setBridgeInfo(infoResponse);
       })
       .catch((error) => {
         if (!mounted) return;
         setBridgeHealth(null);
-        setBridgeInfo(null);
         setBridgeError(error instanceof Error ? error.message : t("dashboard.bridgeUnavailable"));
       });
     return () => {
@@ -121,7 +118,7 @@ export function DashboardPage({ embedded = false }: DashboardPageProps) {
                 <div>
                   <p className="text-xs font-medium uppercase tracking-[0.16em] text-nebula-muted">{t("dashboard.bridgeStatus")}</p>
                   <p className="mt-3 text-2xl font-semibold text-nebula-text">{bridgeHealth?.ok ? t("common.online") : t("common.offline")}</p>
-                  <p className="mt-1 text-xs text-slate-400">{bridgeInfo?.gateway ?? bridgeError ?? settings.bridgeHttpUrl}</p>
+                  <p className="mt-1 text-xs text-slate-400">{bridgeError ?? settings.bridgeHttpUrl}</p>
                 </div>
                 <span className="grid h-10 w-10 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
                   <Link2 className="h-5 w-5" />
