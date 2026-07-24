@@ -1,16 +1,37 @@
 [Unit]
 Description=NebulaIM Web Bridge and Frontend
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
+User=nebulaim-web
+Group=nebulaim-web
 WorkingDirectory=/opt/nebulaim-web/bridge
 EnvironmentFile=/opt/nebulaim-web/bridge.env
-ExecStart=/root/.nvm/versions/node/v26.4.0/bin/node /opt/nebulaim-web/bridge/dist/src/index.js
-Restart=always
+ExecStart=/usr/bin/node /opt/nebulaim-web/bridge/dist/src/index.js
+Restart=on-failure
 RestartSec=3
 KillSignal=SIGTERM
 SyslogIdentifier=nebulaim-web
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/opt/nebulaim-web/uploads
 
 [Install]
 WantedBy=multi-user.target

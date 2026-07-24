@@ -6,6 +6,7 @@ import path from "node:path";
 import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
+import { grpcChannelCredentials, grpcChannelOptions } from "./grpcCredentials.js";
 
 type GrpcCallback<T> = (error: grpc.ServiceError | null, response: T) => void;
 
@@ -43,7 +44,11 @@ type AdminMethod =
   | "RunCleanup"
   | "GetServiceOverview"
   | "ListAuditEvents";
-type ServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => AdminGrpcClient;
+type ServiceConstructor = new (
+  address: string,
+  credentials: grpc.ChannelCredentials,
+  options?: grpc.ChannelOptions
+) => AdminGrpcClient;
 
 let cachedClient: AdminGrpcClient | null = null;
 
@@ -188,7 +193,8 @@ function getAdminClient(): AdminGrpcClient {
 
   cachedClient = new AdminService(
     `${config.adminServiceHost}:${config.adminServicePort}`,
-    grpc.credentials.createInsecure()
+    grpcChannelCredentials(),
+    grpcChannelOptions()
   );
   return cachedClient;
 }

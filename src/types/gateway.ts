@@ -10,6 +10,7 @@ export type GatewayStatus = {
   lastHeartbeatAt?: number;
   gatewayUrl?: string;
   error?: string;
+  sessionExpired?: boolean;
 };
 
 export type RegisterResult = {
@@ -48,6 +49,7 @@ export type MessageHandler = (message: Message) => void;
 export type StatusHandler = (status: GatewayStatus) => void;
 
 export interface GatewayClient {
+  setSession(token: string, userId: string): void;
   connect(): Promise<void>;
   disconnect(): void;
   register(username: string, password: string, nickname: string): Promise<RegisterResult>;

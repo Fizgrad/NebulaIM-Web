@@ -7,6 +7,7 @@ import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
 import { internalMetadata } from "./grpcMetadata.js";
+import { grpcChannelCredentials, grpcChannelOptions } from "./grpcCredentials.js";
 import { authUserId } from "./authMiddleware.js";
 
 type CommonResponse = {
@@ -44,7 +45,11 @@ type DeviceGrpcClient = grpc.Client & {
 };
 
 type DeviceMethod = "ListDevices" | "KickDevice" | "KickAllDevices";
-type DeviceServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => DeviceGrpcClient;
+type DeviceServiceConstructor = new (
+  address: string,
+  credentials: grpc.ChannelCredentials,
+  options?: grpc.ChannelOptions
+) => DeviceGrpcClient;
 
 let cachedClient: DeviceGrpcClient | null = null;
 
@@ -58,7 +63,7 @@ export function createDeviceRouter(): Router {
     try {
       const response = await invokeDevice<ListDevicesResponse>("ListDevices", {
         requestId,
-        userId: Number(userId)
+        userId
       });
 
       if (!isOk(response.response)) {
@@ -87,7 +92,7 @@ export function createDeviceRouter(): Router {
     try {
       const response = await invokeDevice<CommonResponse>("KickDevice", {
         requestId,
-        userId: Number(userId),
+        userId,
         deviceId
       });
 
@@ -109,7 +114,7 @@ export function createDeviceRouter(): Router {
     try {
       const response = await invokeDevice<CommonResponse>("KickAllDevices", {
         requestId,
-        userId: Number(userId)
+        userId
       });
 
       if (!isOk(response)) {
@@ -156,7 +161,8 @@ function getDeviceClient(): DeviceGrpcClient {
 
   cachedClient = new DeviceService(
     `${config.deviceServiceHost}:${config.deviceServicePort}`,
-    grpc.credentials.createInsecure()
+    grpcChannelCredentials(),
+    grpcChannelOptions()
   );
   return cachedClient;
 }

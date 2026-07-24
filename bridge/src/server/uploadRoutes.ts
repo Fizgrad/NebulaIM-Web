@@ -66,7 +66,7 @@ export function createUploadRouter(): Router {
       const year = String(now.getUTCFullYear());
       const month = String(now.getUTCMonth() + 1).padStart(2, "0");
       const object = await writeMediaObject(mediaKey(`images/${year}/${month}/${fileName}`), image.buffer, image.mimeType);
-      const publicLocation = mediaPublicLocation(req, object.key);
+      const publicLocation = mediaPublicLocation(object.key);
 
       res.status(201).json({
         ok: true,
@@ -137,7 +137,7 @@ function matchesImageSignature(mimeType: keyof typeof allowedImages, buffer: Buf
   );
 }
 
-function mediaPublicLocation(req: express.Request, key: string) {
+function mediaPublicLocation(key: string) {
   const base = config.mediaPublicBaseUrl.replace(/\/+$/, "") || (config.mediaStorageDriver === "s3" ? "/media" : "/uploads");
   const encodedKey = key.split("/").map(encodeURIComponent).join("/");
   if (/^https?:\/\//i.test(base)) {
@@ -149,21 +149,9 @@ function mediaPublicLocation(req: express.Request, key: string) {
   }
   const path = `${base.startsWith("/") ? base : `/${base}`}/${encodedKey}`;
   return {
-    url: `${publicBaseUrl(req)}${path}`,
+    url: `${config.publicBaseUrl}${path}`,
     path
   };
-}
-
-function publicBaseUrl(req: express.Request) {
-  const forwardedProto = firstHeaderValue(req.header("x-forwarded-proto"));
-  const forwardedHost = firstHeaderValue(req.header("x-forwarded-host"));
-  const proto = forwardedProto || req.protocol;
-  const host = forwardedHost || req.header("host") || "localhost";
-  return `${proto}://${host}`;
-}
-
-function firstHeaderValue(value: string | undefined) {
-  return value?.split(",")[0]?.trim() ?? "";
 }
 
 function sendValidationError(res: express.Response, message: string) {

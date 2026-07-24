@@ -93,3 +93,168 @@ test("theme controls apply dark light and system modes", async ({ page }) => {
   await expect(page.locator("html")).not.toHaveClass(/light/);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
+
+test("browser protobuf registry loads and encodes Gateway messages", async ({ page }) => {
+  const browserCompatibilityWarnings: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "warning" && message.text().includes('Module "fs"')) {
+      browserCompatibilityWarnings.push(message.text());
+    }
+  });
+
+  await page.goto("/login");
+  const encodedLength = await page.evaluate(async () => {
+    const registry = await import("/src/services/browserProtoRegistry.ts");
+    const body = await registry.encodeProto("nebula.proto.ResumeSessionRequest", {
+      requestId: "protobuf-browser-test",
+      token: "test-token",
+      deviceId: "test-device",
+      platform: "web",
+      deviceName: "Browser test"
+    });
+    return body.length;
+  });
+
+  expect(encodedLength).toBeGreaterThan(0);
+  expect(browserCompatibilityWarnings).toEqual([]);
+});
+
+test("gateway connection rejects when the socket closes before opening", async ({ page }) => {
+  await page.goto("/login");
+
+  const result = await page.evaluate(async () => {
+    const { DirectGatewayClient } = await import("/src/services/directGatewayClient.ts");
+    const client = new DirectGatewayClient({
+      wsUrl: "ws://127.0.0.1:65534/ws",
+      autoReconnect: false,
+      heartbeatIntervalMs: 15_000
+    });
+    return Promise.race([
+      client.connect().then(
+        () => "connected",
+        () => "rejected"
+      ),
+      new Promise<string>((resolve) => window.setTimeout(() => resolve("timeout"), 2_000))
+    ]);
+  });
+
+  expect(result).toBe("rejected");
+});
+
+test("chat loads older history with the composite cursor", async ({ page }) => {
+  await authenticate(page);
+  let requestedCursor = "";
+
+  await page.route("http://127.0.0.1:8080/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/conversations") {
+      await route.fulfill({
+        json: {
+          ok: true,
+          conversations: [
+            {
+              conversationId: "50001",
+              conversationType: 1,
+              ownerUserId: "10001",
+              peerUserId: "10002",
+              groupId: "0",
+              lastMessageId: "200",
+              lastMessagePreview: "newer message",
+              lastMessageAt: 2_000,
+              unreadCount: 0,
+              pinned: false,
+              muted: false,
+              deleted: false,
+              updatedAt: 2_000
+            }
+          ]
+        }
+      });
+      return;
+    }
+    if (url.pathname === "/api/messages/conversations/50001") {
+      const before = url.searchParams.get("before");
+      const beforeMessageId = url.searchParams.get("beforeMessageId");
+      if (beforeMessageId === "200") {
+        requestedCursor = `${before}:${beforeMessageId}`;
+        await route.fulfill({
+          json: {
+            ok: true,
+            messages: [
+              {
+                messageId: "100",
+                conversationId: "50001",
+                fromUserId: "10002",
+                toUserId: "10001",
+                groupId: "0",
+                contentType: 1,
+                content: "older message",
+                status: 3,
+                recalled: false,
+                recalledAt: 0,
+                createdAt: 1_000
+              }
+            ],
+            nextCursor: null,
+            hasMore: false
+          }
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          ok: true,
+          messages: [
+            {
+              messageId: "200",
+              conversationId: "50001",
+              fromUserId: "10002",
+              toUserId: "10001",
+              groupId: "0",
+              contentType: 1,
+              content: "newer message",
+              status: 3,
+              recalled: false,
+              recalledAt: 0,
+              createdAt: 2_000
+            }
+          ],
+          nextCursor: { before: 2_000, beforeMessageId: "200" },
+          hasMore: true
+        }
+      });
+      return;
+    }
+    if (url.pathname === "/api/presence/users") {
+      await route.fulfill({ json: { ok: true, users: [{ userId: "10002", online: false }] } });
+      return;
+    }
+    if (url.pathname === "/api/auth/users/10002") {
+      await route.fulfill({
+        json: {
+          ok: true,
+          user: { userId: "10002", username: "peer", nickname: "Peer", createdAt: 0 }
+        }
+      });
+      return;
+    }
+    if (url.pathname === "/api/conversations/50001/read") {
+      await route.fulfill({ json: { ok: true } });
+      return;
+    }
+    await route.fulfill({ status: 404, json: { error: { code: "NOT_FOUND", message: "Unexpected test route." } } });
+  });
+
+  await page.goto("/app/chat");
+  await page.evaluate(async () => {
+    const { useChatStore } = await import("/src/store/chatStore.ts");
+    await useChatStore.getState().loadConversations();
+    useChatStore.getState().setActiveConversationId("direct-10002");
+  });
+
+  await expect(page.locator("div.whitespace-pre-wrap", { hasText: /^newer message$/ })).toBeVisible();
+  await page.getByRole("button", { name: "Load earlier messages" }).click();
+  await expect(page.locator("div.whitespace-pre-wrap", { hasText: /^older message$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load earlier messages" })).toHaveCount(0);
+  expect(requestedCursor).toBe("2000:200");
+});

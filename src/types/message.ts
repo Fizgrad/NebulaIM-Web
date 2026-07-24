@@ -15,6 +15,8 @@ export type Message = {
   status: MessageStatus;
   createdAt: number;
   isMine: boolean;
+  recalled?: boolean;
+  recalledAt?: number;
 };
 
 export type SendMessagePayload = {

@@ -31,6 +31,11 @@ BRIDGE_PORT=8080
 
 GATEWAY_TCP_HOST=127.0.0.1
 GATEWAY_TCP_PORT=9000
+GATEWAY_TCP_TLS_ENABLED=false
+GATEWAY_TCP_TLS_CA_FILE=
+GATEWAY_TCP_TLS_CERT_FILE=
+GATEWAY_TCP_TLS_KEY_FILE=
+GATEWAY_TCP_TLS_SERVER_NAME=
 
 USER_SERVICE_HOST=127.0.0.1
 USER_SERVICE_PORT=50051
@@ -50,8 +55,18 @@ DEVICE_SERVICE_PORT=50058
 ADMIN_SERVICE_HOST=127.0.0.1
 ADMIN_SERVICE_PORT=50057
 
+GATEWAY_SERVICE_HOST=127.0.0.1
+GATEWAY_SERVICE_PORT=50055
+
+GRPC_TLS_ENABLED=false
+GRPC_TLS_CA_FILE=
+GRPC_TLS_CERT_FILE=
+GRPC_TLS_KEY_FILE=
+GRPC_TLS_SERVER_NAME=
+
 INTERNAL_RPC_TOKEN=
 
+PUBLIC_BASE_URL=http://localhost:8080
 CORS_ORIGIN=http://localhost:5173
 LOG_LEVEL=info
 HEARTBEAT_INTERVAL_MS=15000
@@ -72,13 +87,6 @@ S3_ACCESS_KEY_ID=
 S3_SECRET_ACCESS_KEY=
 S3_FORCE_PATH_STYLE=true
 S3_KEY_PREFIX=
-
-MYSQL_HOST=
-MYSQL_PORT=3306
-MYSQL_USER=
-MYSQL_PASSWORD=
-MYSQL_DATABASE=
-MYSQL_CONNECTION_LIMIT=5
 ```
 
 `WEB_STATIC_DIR` can point to the built frontend directory, for example `/opt/nebulaim-web/web`, so the Bridge process can serve the SPA. When the Bridge serves the SPA, frontend routes fall back to `index.html` and `/api/*` routes remain API-only.
@@ -87,9 +95,9 @@ MYSQL_CONNECTION_LIMIT=5
 
 `MEDIA_STORAGE_DRIVER=s3` uploads images to an S3-compatible store such as MinIO. `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` are required in that mode. The Bridge returns URLs under `MEDIA_PUBLIC_BASE_URL`, which is `/media` in production. The Bridge also serves `/media/...` by reading objects from S3, so the current Nginx reverse proxy can keep forwarding all web traffic to the Bridge.
 
-`MYSQL_*` enables read-only message history loading for opened conversations. The Bridge verifies that the authenticated user owns the requested conversation before reading from the `messages` table.
-
 `INTERNAL_RPC_TOKEN` must match the backend `internal_rpc.auth.token` when backend internal gRPC auth is enabled. Leave it empty only when backend internal gRPC auth is disabled.
+
+`GRPC_TLS_*` configures TLS or mTLS for all backend gRPC clients. Plaintext gRPC is accepted only for loopback service hosts. `GATEWAY_TCP_TLS_*` applies the same rule to a Gateway running outside the Bridge host. `PUBLIC_BASE_URL` is the canonical external Bridge URL used in uploaded-media responses. `CORS_ORIGIN` is a comma-separated explicit allowlist; wildcard origins are rejected.
 
 ## Install
 
@@ -130,18 +138,11 @@ WS  /ws
 }
 ```
 
-`/info` returns configured backend addresses and the public WebSocket route:
+`/info` returns only public service information:
 
 ```json
 {
   "name": "nebulaim-web-bridge",
-  "gateway": "127.0.0.1:9000",
-  "user": "127.0.0.1:50051",
-  "message": "127.0.0.1:50052",
-  "relation": "127.0.0.1:50053",
-  "conversation": "127.0.0.1:50056",
-  "device": "127.0.0.1:50058",
-  "admin": "127.0.0.1:50057",
   "websocket": "/ws"
 }
 ```
@@ -199,14 +200,23 @@ The Bridge forwards these calls to `nebula.proto.RelationService` on `RELATION_S
 ## Message HTTP API
 
 ```text
-GET  /api/messages/conversations/:conversationId?limit=50
+GET  /api/messages/conversations/:conversationId?limit=50&before=<timestamp>&beforeMessageId=<id>
 GET  /api/messages/read-state?messageIds=10001,10002
+POST /api/conversations/:conversationId/read
 POST /api/uploads/images
 POST /api/messages/single
 POST /api/messages/group
 ```
 
 Message and upload routes require `Authorization: Bearer <NebulaIM token>`. The Bridge derives the sender and read-state viewer from the token identity.
+
+History is loaded through `MessageService.ListConversationMessages`. The response includes `nextCursor` and `hasMore`; the next request sends both `before` and `beforeMessageId` so equal timestamps remain stable. Read-state is available only to the message sender. Conversation read requests must include an explicit cursor:
+
+```json
+{
+  "upToMessageId": "10002"
+}
+```
 
 Direct message request:
 
@@ -253,11 +263,9 @@ MINIO_DATA_DIR=/opt/nebulaim-data/minio \
 bash deploy/setup-minio-media.sh
 ```
 
-The script starts a `nebulaim-minio` container on `127.0.0.1:19000`, stores object data in `/opt/nebulaim-data/minio`, creates the `nebulaim-media` bucket, and writes missing S3 settings into the Bridge environment file. Generated credentials stay on the server only.
+The script starts a digest-pinned `nebulaim-minio` container on `127.0.0.1:19000`, stores object data in `/opt/nebulaim-data/minio`, and creates the private `nebulaim-media` bucket. MinIO root credentials are stored in `/opt/nebulaim-data/minio.env`; the Bridge receives a separate bucket-scoped application credential in its environment file.
 
-The Bridge forwards message send calls to `nebula.proto.MessageService` on `MESSAGE_SERVICE_HOST:MESSAGE_SERVICE_PORT`. The frontend uses these endpoints for sending messages so a refreshed browser session can send even when the Gateway WebSocket has not re-run `LOGIN_REQ`.
-
-Conversation history is read from MySQL using `MYSQL_*` because the current MessageService protobuf does not expose a list-history RPC.
+The Bridge forwards message send calls to `nebula.proto.MessageService` on `MESSAGE_SERVICE_HOST:MESSAGE_SERVICE_PORT`. After a page refresh, the WebSocket session is restored with `RESUME_SESSION_REQ` before the client reports a connected state.
 
 ## Conversation HTTP API
 

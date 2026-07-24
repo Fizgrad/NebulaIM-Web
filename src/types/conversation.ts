@@ -8,6 +8,7 @@ export type Conversation = {
   avatar?: string;
   online?: boolean;
   lastMessage: string;
+  lastMessageId?: string;
   lastMessageAt: number;
   unreadCount: number;
   pinned?: boolean;

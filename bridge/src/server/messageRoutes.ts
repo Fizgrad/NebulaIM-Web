@@ -2,14 +2,13 @@ import type { Router } from "express";
 import express from "express";
 import * as grpc from "@grpc/grpc-js";
 import protoLoader from "@grpc/proto-loader";
-import { type RowDataPacket } from "mysql2/promise";
 import path from "node:path";
 import { z } from "zod";
 import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
 import { internalMetadata } from "./grpcMetadata.js";
-import { getMysqlPool } from "./mysqlPool.js";
+import { grpcChannelCredentials, grpcChannelOptions } from "./grpcCredentials.js";
 import { authUserId } from "./authMiddleware.js";
 
 type CommonResponse = {
@@ -34,12 +33,41 @@ type MessageUnary<TResponse> = (
 type MessageGrpcClient = grpc.Client & {
   SendSingleMessage: MessageUnary<SendMessageResponse>;
   SendGroupMessage: MessageUnary<SendMessageResponse>;
+  ListConversationMessages: MessageUnary<ListConversationMessagesResponse>;
   AckMessage: MessageUnary<{ response: CommonResponse }>;
   MarkConversationRead: MessageUnary<CommonResponse>;
   GetMessageReadState: MessageUnary<GetMessageReadStateResponse>;
 };
 
-type MessageMethod = "SendSingleMessage" | "SendGroupMessage" | "AckMessage" | "MarkConversationRead" | "GetMessageReadState";
+type MessageMethod =
+  | "SendSingleMessage"
+  | "SendGroupMessage"
+  | "ListConversationMessages"
+  | "AckMessage"
+  | "MarkConversationRead"
+  | "GetMessageReadState";
+
+type ProtoMessage = {
+  messageId: string;
+  conversationId: string;
+  fromUserId: string;
+  toUserId: string;
+  groupId: string;
+  contentType: string | number;
+  content: string;
+  status: string | number;
+  recalled: boolean;
+  recalledAt: string | number;
+  timestamp: string | number;
+};
+
+type ListConversationMessagesResponse = {
+  response: CommonResponse;
+  messages: ProtoMessage[];
+  nextBeforeTime: string | number;
+  nextBeforeMessageId: string;
+  hasMore: boolean;
+};
 
 type MessageReadStateRow = {
   messageId: string | number;
@@ -53,12 +81,17 @@ type GetMessageReadStateResponse = {
   states: MessageReadStateRow[];
 };
 
-type MessageServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => MessageGrpcClient;
+type MessageServiceConstructor = new (
+  address: string,
+  credentials: grpc.ChannelCredentials,
+  options?: grpc.ChannelOptions
+) => MessageGrpcClient;
 
 const numericIdSchema = z.string().regex(/^\d+$/, "ID must be numeric.");
 const maxUint32 = 4_294_967_295;
 const historyQuerySchema = z.object({
   before: z.coerce.number().int().positive().optional(),
+  beforeMessageId: numericIdSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50)
 });
 
@@ -90,24 +123,6 @@ const sendGroupSchema = z.object({
 
 let cachedClient: MessageGrpcClient | null = null;
 
-type MessageRow = RowDataPacket & {
-  message_id: string;
-  conversation_id: string;
-  from_user_id: string;
-  to_user_id: string;
-  group_id: string;
-  message_type: number;
-  content: string;
-  status: number;
-  recalled: number;
-  recalled_at: string;
-  created_at: string;
-};
-
-type AuthorizedMessageRow = RowDataPacket & {
-  message_id: string | number;
-};
-
 export function createMessageRouter(): Router {
   const router = express.Router();
 
@@ -121,39 +136,33 @@ export function createMessageRouter(): Router {
     }
 
     try {
-      const pool = getMysqlPool();
-      const [conversationRows] = await pool.execute<RowDataPacket[]>(
-        "SELECT conversation_id FROM conversations WHERE conversation_id = ? AND owner_user_id = ? AND deleted = 0 LIMIT 1",
-        [conversationId, userId]
-      );
-      if (conversationRows.length === 0) {
-        res.status(404).json({
-          ok: false,
-          error: {
-            code: "CONVERSATION_NOT_FOUND",
-            message: "Conversation is not available for this user."
-          }
-        });
+      const response = await invokeMessage<ListConversationMessagesResponse>("ListConversationMessages", {
+        requestId: requestId(req, "message_history_req"),
+        requesterUserId: userId,
+        conversationId,
+        beforeTime: parsed.data.before ?? 0,
+        beforeMessageId: parsed.data.beforeMessageId ?? "0",
+        pageSize: parsed.data.limit
+      });
+      if (!isOk(response.response)) {
+        sendMessageError(res, response.response);
         return;
       }
 
-      const before = parsed.data.before ?? Date.now();
-      const limit = parsed.data.limit;
-      const [rows] = await pool.execute<MessageRow[]>(
-        `SELECT message_id, conversation_id, from_user_id, to_user_id, group_id, message_type, content, status, recalled, recalled_at, created_at
-         FROM messages
-         WHERE conversation_id = ? AND created_at <= ?
-         ORDER BY created_at DESC, message_id DESC
-         LIMIT ${limit}`,
-        [conversationId, before]
-      );
-
       res.json({
         ok: true,
-        messages: rows.reverse().map(toBridgeMessage)
+        messages: (response.messages ?? []).map(toBridgeMessage),
+        nextCursor:
+          response.nextBeforeMessageId && response.nextBeforeMessageId !== "0"
+            ? {
+                before: toSafeNumber(response.nextBeforeTime),
+                beforeMessageId: response.nextBeforeMessageId
+              }
+            : null,
+        hasMore: Boolean(response.hasMore)
       });
     } catch (error) {
-      sendHistoryError(res, error);
+      sendRpcError(res, "MessageService.ListConversationMessages failed.", error);
     }
   });
 
@@ -168,8 +177,8 @@ export function createMessageRouter(): Router {
     try {
       const response = await invokeMessage<SendMessageResponse>("SendSingleMessage", {
         requestId: requestId(req, "send_single_req"),
-        fromUserId: Number(fromUserId),
-        toUserId: Number(parsed.data.toUserId),
+        fromUserId,
+        toUserId: parsed.data.toUserId,
         contentType: toProtoContentType(parsed.data.contentType),
         content: parsed.data.content,
         clientSequenceId: parsed.data.clientSequenceId
@@ -202,8 +211,8 @@ export function createMessageRouter(): Router {
     try {
       const response = await invokeMessage<SendMessageResponse>("SendGroupMessage", {
         requestId: requestId(req, "send_group_req"),
-        fromUserId: Number(fromUserId),
-        groupId: Number(parsed.data.groupId),
+        fromUserId,
+        groupId: parsed.data.groupId,
         contentType: toProtoContentType(parsed.data.contentType),
         content: parsed.data.content,
         clientSequenceId: parsed.data.clientSequenceId
@@ -233,24 +242,13 @@ export function createMessageRouter(): Router {
       return;
     }
 
-    let authorizedMessageIds: Set<string>;
-    try {
-      authorizedMessageIds = await listAuthorizedReadStateMessageIds(userId, parsed.data.messageIds);
-    } catch (error) {
-      sendReadStateError(res, error);
-      return;
-    }
-
     const results = await Promise.all(
       parsed.data.messageIds.map(async (messageId) => {
-        if (!authorizedMessageIds.has(messageId)) {
-          return { messageId, states: [] };
-        }
-
         try {
           const response = await invokeMessage<GetMessageReadStateResponse>("GetMessageReadState", {
             requestId: requestId(req, "read_state_req"),
-            messageId: Number(messageId)
+            messageId,
+            requesterUserId: userId
           });
           if (!isOk(response.response)) {
             return { messageId, states: [] };
@@ -276,11 +274,17 @@ export function createMessageRouter(): Router {
   return router;
 }
 
-export async function markMessageConversationRead(userId: string, conversationId: string, requestIdValue: string): Promise<CommonResponse> {
+export async function markMessageConversationRead(
+  userId: string,
+  conversationId: string,
+  upToMessageId: string,
+  requestIdValue: string
+): Promise<CommonResponse> {
   return invokeMessage<CommonResponse>("MarkConversationRead", {
     requestId: requestIdValue,
-    userId: Number(userId),
-    conversationId: Number(conversationId)
+    userId,
+    conversationId,
+    upToMessageId
   });
 }
 
@@ -314,40 +318,50 @@ function getMessageClient(): MessageGrpcClient {
 
   cachedClient = new MessageService(
     `${config.messageServiceHost}:${config.messageServicePort}`,
-    grpc.credentials.createInsecure()
+    grpcChannelCredentials(),
+    grpcChannelOptions()
   );
   return cachedClient;
 }
 
-function toBridgeMessage(row: MessageRow) {
+function toBridgeMessage(message: ProtoMessage) {
   return {
-    messageId: String(row.message_id),
-    conversationId: String(row.conversation_id),
-    fromUserId: String(row.from_user_id),
-    toUserId: String(row.to_user_id),
-    groupId: String(row.group_id),
-    contentType: row.message_type,
-    content: row.content,
-    status: row.status,
-    recalled: Boolean(row.recalled),
-    recalledAt: String(row.recalled_at ?? "0"),
-    createdAt: String(row.created_at)
+    messageId: String(message.messageId),
+    conversationId: String(message.conversationId),
+    fromUserId: String(message.fromUserId),
+    toUserId: String(message.toUserId),
+    groupId: String(message.groupId),
+    contentType: contentTypeNumber(message.contentType),
+    content: message.content,
+    status: messageStatusNumber(message.status),
+    recalled: Boolean(message.recalled),
+    recalledAt: String(message.recalledAt ?? "0"),
+    createdAt: String(message.timestamp)
   };
 }
 
-async function listAuthorizedReadStateMessageIds(userId: string, messageIds: string[]) {
-  const uniqueMessageIds = [...new Set(messageIds)];
-  if (uniqueMessageIds.length === 0) return new Set<string>();
+function contentTypeNumber(contentType: string | number) {
+  if (typeof contentType === "number") return contentType;
+  return contentType === "MESSAGE_CONTENT_TYPE_IMAGE" ? 2 : 1;
+}
 
-  const placeholders = uniqueMessageIds.map(() => "?").join(", ");
-  const [rows] = await getMysqlPool().execute<AuthorizedMessageRow[]>(
-    `SELECT DISTINCT m.message_id
-     FROM messages m
-     INNER JOIN conversations c ON c.conversation_id = m.conversation_id
-     WHERE c.owner_user_id = ? AND c.deleted = 0 AND m.message_id IN (${placeholders})`,
-    [userId, ...uniqueMessageIds]
-  );
-  return new Set(rows.map((row) => String(row.message_id)));
+function messageStatusNumber(status: string | number) {
+  if (typeof status === "number") return status;
+  const statuses: Record<string, number> = {
+    MESSAGE_STATUS_UNKNOWN: 0,
+    MESSAGE_STATUS_SENT: 1,
+    MESSAGE_STATUS_DELIVERED: 2,
+    MESSAGE_STATUS_ACKED: 3,
+    MESSAGE_STATUS_FAILED: 4,
+    MESSAGE_STATUS_READ: 5,
+    MESSAGE_STATUS_RECALLED: 6
+  };
+  return statuses[status] ?? 0;
+}
+
+function toSafeNumber(value: string | number | undefined) {
+  const parsed = Number(value ?? 0);
+  return Number.isSafeInteger(parsed) ? parsed : 0;
 }
 
 function requestId(req: express.Request, prefix: string) {
@@ -391,28 +405,6 @@ function sendRpcError(res: express.Response, message: string, error: unknown) {
     error: {
       code: "MESSAGE_SERVICE_UNAVAILABLE",
       message: error instanceof Error ? error.message : message
-    }
-  });
-}
-
-function sendHistoryError(res: express.Response, error: unknown) {
-  logger.warn("Message history query failed.", { detail: error });
-  res.status(503).json({
-    ok: false,
-    error: {
-      code: "MESSAGE_HISTORY_UNAVAILABLE",
-      message: error instanceof Error ? error.message : "Message history is unavailable."
-    }
-  });
-}
-
-function sendReadStateError(res: express.Response, error: unknown) {
-  logger.warn("Message read-state authorization query failed.", { detail: error });
-  res.status(503).json({
-    ok: false,
-    error: {
-      code: "MESSAGE_READ_STATE_UNAVAILABLE",
-      message: error instanceof Error ? error.message : "Message read state is unavailable."
     }
   });
 }

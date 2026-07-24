@@ -2,6 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import tls from "node:tls";
 import cors from "cors";
 import express from "express";
 import type { BridgeConfig } from "../config.js";
@@ -18,7 +19,17 @@ import { requireBridgeAuth } from "./authMiddleware.js";
 
 export function createHttpServer(config: BridgeConfig): http.Server {
   const app = express();
-  app.use(cors({ origin: config.corsOrigin }));
+  app.use(
+    cors({
+      origin(origin, callback) {
+        if (!origin || config.corsOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(null, false);
+      }
+    })
+  );
   app.use(express.json({ limit: config.jsonBodyLimit }));
 
   app.get("/health", (_req, res) => {
@@ -31,13 +42,6 @@ export function createHttpServer(config: BridgeConfig): http.Server {
   app.get("/info", (_req, res) => {
     res.json({
       name: "nebulaim-web-bridge",
-      gateway: `${config.gatewayTcpHost}:${config.gatewayTcpPort}`,
-      user: `${config.userServiceHost}:${config.userServicePort}`,
-      message: `${config.messageServiceHost}:${config.messageServicePort}`,
-      relation: `${config.relationServiceHost}:${config.relationServicePort}`,
-      conversation: `${config.conversationServiceHost}:${config.conversationServicePort}`,
-      device: `${config.deviceServiceHost}:${config.deviceServicePort}`,
-      admin: `${config.adminServiceHost}:${config.adminServicePort}`,
       websocket: "/ws"
     });
   });
@@ -97,6 +101,16 @@ export function createHttpServer(config: BridgeConfig): http.Server {
 }
 
 function attachGatewayWebSocketProxy(server: http.Server, config: BridgeConfig) {
+  const gatewayTlsOptions = config.gatewayTcpTlsEnabled
+    ? {
+        ca: fs.readFileSync(config.gatewayTcpTlsCaFile),
+        cert: config.gatewayTcpTlsCertFile ? fs.readFileSync(config.gatewayTcpTlsCertFile) : undefined,
+        key: config.gatewayTcpTlsKeyFile ? fs.readFileSync(config.gatewayTcpTlsKeyFile) : undefined,
+        servername: config.gatewayTcpTlsServerName || config.gatewayTcpHost,
+        rejectUnauthorized: true
+      }
+    : null;
+
   server.on("upgrade", (req, socket, head) => {
     const pathname = parsePathname(req.url);
     if (pathname !== "/ws") {
@@ -105,15 +119,30 @@ function attachGatewayWebSocketProxy(server: http.Server, config: BridgeConfig) 
       return;
     }
 
-    const upstream = net.connect(config.gatewayTcpPort, config.gatewayTcpHost);
+    const upstream = gatewayTlsOptions
+      ? tls.connect({
+          host: config.gatewayTcpHost,
+          port: config.gatewayTcpPort,
+          ...gatewayTlsOptions
+        })
+      : net.connect(config.gatewayTcpPort, config.gatewayTcpHost);
     let connected = false;
 
-    upstream.on("connect", () => {
+    const handleConnected = () => {
       connected = true;
+      upstream.setTimeout(0);
       upstream.write(formatUpgradeRequest(req));
       if (head.length > 0) upstream.write(head);
       socket.pipe(upstream);
       upstream.pipe(socket);
+    };
+    if (gatewayTlsOptions) {
+      upstream.once("secureConnect", handleConnected);
+    } else {
+      upstream.once("connect", handleConnected);
+    }
+    upstream.setTimeout(config.gatewayRequestTimeoutMs, () => {
+      upstream.destroy(new Error("Gateway connection timed out."));
     });
 
     upstream.on("error", () => {

@@ -131,9 +131,14 @@ export type BridgeMessageInfo = {
   createdAt: string | number;
 };
 
-type ListBridgeMessagesResponse = {
+export type BridgeMessageHistoryPage = {
   ok: boolean;
   messages: BridgeMessageInfo[];
+  nextCursor: {
+    before: number;
+    beforeMessageId: string;
+  } | null;
+  hasMore: boolean;
 };
 
 type RawFriendRequest = {
@@ -518,11 +523,19 @@ export async function listBridgeConversations(baseUrl: string, userId: string, p
   return response.conversations ?? [];
 }
 
-export async function markBridgeConversationRead(baseUrl: string, userId: string, conversationId: string): Promise<void> {
+export async function markBridgeConversationRead(
+  baseUrl: string,
+  userId: string,
+  conversationId: string,
+  upToMessageId: string
+): Promise<void> {
   void userId;
   await bridgeRequest(() =>
     requestWithRetry(
-      () => httpClient.post(`${baseUrl.replace(/\/$/, "")}/api/conversations/${conversationId}/read`),
+      () =>
+        httpClient.post(`${baseUrl.replace(/\/$/, "")}/api/conversations/${conversationId}/read`, {
+          upToMessageId
+        }),
       { retries: 1 }
     )
   );
@@ -532,20 +545,26 @@ export async function listBridgeConversationMessages(
   baseUrl: string,
   userId: string,
   conversationId: string,
-  before = Date.now(),
-  limit = 50
-) {
+  before?: number,
+  limit = 50,
+  beforeMessageId?: string
+): Promise<BridgeMessageHistoryPage> {
   void userId;
   const response = await bridgeRequest(() =>
     requestWithRetry(
       () =>
-        httpClient.get<ListBridgeMessagesResponse>(`${baseUrl.replace(/\/$/, "")}/api/messages/conversations/${conversationId}`, {
-          params: { before, limit }
+        httpClient.get<BridgeMessageHistoryPage>(`${baseUrl.replace(/\/$/, "")}/api/messages/conversations/${conversationId}`, {
+          params: { before, beforeMessageId, limit }
         }),
       { retries: 1 }
     )
   );
-  return response.messages ?? [];
+  return {
+    ...response,
+    messages: response.messages ?? [],
+    nextCursor: response.nextCursor ?? null,
+    hasMore: Boolean(response.hasMore)
+  };
 }
 
 export type BridgeMessageReadState = {

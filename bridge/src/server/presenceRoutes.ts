@@ -8,6 +8,7 @@ import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
 import { internalMetadata } from "./grpcMetadata.js";
+import { grpcChannelCredentials, grpcChannelOptions } from "./grpcCredentials.js";
 
 type CommonResponse = {
   code: number;
@@ -40,7 +41,11 @@ type GatewayGrpcClient = grpc.Client & {
   GetOnlineStatus: GatewayUnary<GetOnlineStatusResponse>;
 };
 
-type GatewayServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => GatewayGrpcClient;
+type GatewayServiceConstructor = new (
+  address: string,
+  credentials: grpc.ChannelCredentials,
+  options?: grpc.ChannelOptions
+) => GatewayGrpcClient;
 
 const numericIdSchema = z.string().regex(/^\d+$/, "User ID must be numeric.");
 
@@ -96,7 +101,7 @@ export function createPresenceRouter(): Router {
 async function getOnlineStatus(userId: string): Promise<PresenceInfo> {
   const response = await invokeGateway<GetOnlineStatusResponse>("GetOnlineStatus", {
     requestId: createId("presence_req"),
-    userId: Number(userId)
+    userId
   });
   if (response.response?.code !== 0) {
     throw new Error(response.response?.message || "GatewayService.GetOnlineStatus rejected the request.");
@@ -140,7 +145,8 @@ function getGatewayClient(): GatewayGrpcClient {
 
   cachedClient = new GatewayService(
     `${config.gatewayServiceHost}:${config.gatewayServicePort}`,
-    grpc.credentials.createInsecure()
+    grpcChannelCredentials(),
+    grpcChannelOptions()
   );
   return cachedClient;
 }

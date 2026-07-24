@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
-import { ArrowLeft, ShieldCheck, UsersRound } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { ArrowLeft, ArrowUp, LoaderCircle, ShieldCheck, UsersRound } from "lucide-react";
 import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { EmptyChatState } from "./EmptyChatState";
@@ -20,6 +20,8 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
   const activeConversationId = useChatStore((state) => state.activeConversationId);
   const conversations = useChatStore((state) => state.conversations);
   const messagesByConversationId = useChatStore((state) => state.messagesByConversationId);
+  const messageHistoryByConversationId = useChatStore((state) => state.messageHistoryByConversationId);
+  const loadOlderMessages = useChatStore((state) => state.loadOlderMessages);
   const sendMessage = useChatStore((state) => state.sendMessage);
   const sendImageMessage = useChatStore((state) => state.sendImageMessage);
   const retryMessage = useChatStore((state) => state.retryMessage);
@@ -27,24 +29,61 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
   const markConversationRead = useChatStore((state) => state.markConversationRead);
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pendingScrollRestore = useRef<{
+    conversationId: string;
+    scrollHeight: number;
+    scrollTop: number;
+    targetRevision: number;
+  } | null>(null);
 
   const conversation = useMemo(
     () => conversations.find((item) => item.id === activeConversationId) ?? null,
     [activeConversationId, conversations]
   );
   const messages = conversation ? messagesByConversationId[conversation.id] ?? [] : [];
+  const historyState = conversation ? messageHistoryByConversationId[conversation.id] : undefined;
 
   useEffect(() => {
     if (activeConversationId) {
       void markConversationRead(activeConversationId).catch(() => {
-        // The store already clears local unread state; later refreshes can retry the backend read marker.
+        // A later message or conversation refresh will retry the backend read marker.
       });
     }
   }, [activeConversationId, markConversationRead, messages.length]);
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages.length, activeConversationId]);
+  useLayoutEffect(() => {
+    const scrollArea = scrollRef.current;
+    if (!scrollArea) return;
+    const pending = pendingScrollRestore.current;
+    if (
+      pending &&
+      pending.conversationId === activeConversationId &&
+      (historyState?.olderPageRevision ?? 0) >= pending.targetRevision
+    ) {
+      scrollArea.scrollTop = pending.scrollTop + (scrollArea.scrollHeight - pending.scrollHeight);
+      pendingScrollRestore.current = null;
+      return;
+    }
+    if (pending?.conversationId === activeConversationId) return;
+    pendingScrollRestore.current = null;
+    scrollArea.scrollTo({ top: scrollArea.scrollHeight, behavior: "smooth" });
+  }, [activeConversationId, historyState?.olderPageRevision, messages.length]);
+
+  async function handleLoadOlder() {
+    const scrollArea = scrollRef.current;
+    if (!conversation || !scrollArea || !historyState?.hasMore || historyState.loadingOlder) return;
+    pendingScrollRestore.current = {
+      conversationId: conversation.id,
+      scrollHeight: scrollArea.scrollHeight,
+      scrollTop: scrollArea.scrollTop,
+      targetRevision: historyState.olderPageRevision + 1
+    };
+    try {
+      await loadOlderMessages(conversation.id);
+    } catch {
+      pendingScrollRestore.current = null;
+    }
+  }
 
   if (!conversation) {
     return (
@@ -99,6 +138,26 @@ export function ChatWindow({ className, onBack }: ChatWindowProps) {
       </header>
 
       <div ref={scrollRef} className="chat-scroll-area min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:space-y-5 sm:px-5 sm:py-6">
+        {historyState?.hasMore ? (
+          <div className="flex justify-center">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={historyState.loadingOlder}
+              icon={
+                historyState.loadingOlder ? (
+                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ArrowUp className="h-3.5 w-3.5" />
+                )
+              }
+              onClick={() => void handleLoadOlder()}
+            >
+              {historyState.loadingOlder ? t("chat.loadingEarlier") : t("chat.loadEarlier")}
+            </Button>
+          </div>
+        ) : null}
         <div className="mx-auto w-fit rounded-full border border-nebula-border bg-white/[0.04] px-3 py-1 text-xs text-nebula-muted">
           {t("common.today")}
         </div>

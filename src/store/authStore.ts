@@ -93,6 +93,8 @@ export const useAuthStore = create<AuthState>()(
         const settings = useSettingsStore.getState();
         try {
           const response = await refreshBridgeToken(settings.bridgeHttpUrl, token, currentDeviceId());
+          const userId = get().user?.id;
+          if (userId) getGatewayClient().setSession(response.token, userId);
           set({
             token: response.token,
             tokenExpireAt: normalizeExpireAt(response.expireAt),

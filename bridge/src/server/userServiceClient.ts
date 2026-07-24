@@ -3,6 +3,7 @@ import protoLoader from "@grpc/proto-loader";
 import path from "node:path";
 import { config } from "../config.js";
 import { internalMetadata } from "./grpcMetadata.js";
+import { grpcChannelCredentials, grpcChannelOptions } from "./grpcCredentials.js";
 
 export type CommonResponse = {
   code: number;
@@ -56,7 +57,11 @@ type UserGrpcClient = grpc.Client & {
   GetUserByUsername: UserUnary<GetUserInfoResponse>;
 };
 
-type UserServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => UserGrpcClient;
+type UserServiceConstructor = new (
+  address: string,
+  credentials: grpc.ChannelCredentials,
+  options?: grpc.ChannelOptions
+) => UserGrpcClient;
 
 let cachedClient: UserGrpcClient | null = null;
 
@@ -135,6 +140,10 @@ function getUserClient(): UserGrpcClient {
     throw new Error("Failed to load nebula.proto.UserService from user.proto.");
   }
 
-  cachedClient = new UserService(`${config.userServiceHost}:${config.userServicePort}`, grpc.credentials.createInsecure());
+  cachedClient = new UserService(
+    `${config.userServiceHost}:${config.userServicePort}`,
+    grpcChannelCredentials(),
+    grpcChannelOptions()
+  );
   return cachedClient;
 }

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { ChatWindow } from "../components/chat/ChatWindow";
 import { ConversationList } from "../components/chat/ConversationList";
 import { useChatStore } from "../store/chatStore";
+import { clientLogger } from "../services/clientLogger";
 import { cn } from "../utils/cn";
 
 export function ChatPage() {
@@ -13,7 +14,9 @@ export function ChatPage() {
   const setActiveConversationId = useChatStore((state) => state.setActiveConversationId);
 
   useEffect(() => {
-    void startGatewaySession();
+    void startGatewaySession().catch((error) => {
+      clientLogger.warn("Gateway session start failed", error);
+    });
   }, [startGatewaySession]);
 
   useEffect(() => {

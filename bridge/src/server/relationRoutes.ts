@@ -2,14 +2,13 @@ import type { Router } from "express";
 import express from "express";
 import * as grpc from "@grpc/grpc-js";
 import protoLoader from "@grpc/proto-loader";
-import { type RowDataPacket } from "mysql2/promise";
 import path from "node:path";
 import { z } from "zod";
 import { config } from "../config.js";
 import { createId } from "../utils/id.js";
 import { logger } from "../utils/logger.js";
 import { internalMetadata } from "./grpcMetadata.js";
-import { getMysqlPool, hasMysqlConfig } from "./mysqlPool.js";
+import { grpcChannelCredentials, grpcChannelOptions } from "./grpcCredentials.js";
 import { authUserId } from "./authMiddleware.js";
 
 type CommonResponse = {
@@ -70,13 +69,14 @@ type ListGroupMembersResponse = {
   members: UserInfo[];
 };
 
-type GroupRow = RowDataPacket & {
-  id: string;
-  group_name: string;
-  owner_id: string;
-  member_count: number;
-  created_at: string;
-  updated_at: string;
+type GetGroupResponse = {
+  response: CommonResponse;
+  group?: GroupInfo;
+};
+
+type ListGroupsResponse = {
+  response: CommonResponse;
+  groups: GroupInfo[];
 };
 
 type RelationUnary<TResponse> = (
@@ -97,6 +97,9 @@ type RelationGrpcClient = grpc.Client & {
   JoinGroup: RelationUnary<CommonResponse>;
   LeaveGroup: RelationUnary<CommonResponse>;
   ListGroupMembers: RelationUnary<ListGroupMembersResponse>;
+  GetGroup: RelationUnary<GetGroupResponse>;
+  ListGroups: RelationUnary<ListGroupsResponse>;
+  SearchGroups: RelationUnary<ListGroupsResponse>;
 };
 
 type RelationMethod =
@@ -109,9 +112,16 @@ type RelationMethod =
   | "CreateGroup"
   | "JoinGroup"
   | "LeaveGroup"
-  | "ListGroupMembers";
+  | "ListGroupMembers"
+  | "GetGroup"
+  | "ListGroups"
+  | "SearchGroups";
 
-type RelationServiceConstructor = new (address: string, credentials: grpc.ChannelCredentials) => RelationGrpcClient;
+type RelationServiceConstructor = new (
+  address: string,
+  credentials: grpc.ChannelCredentials,
+  options?: grpc.ChannelOptions
+) => RelationGrpcClient;
 
 const numericIdSchema = z.string().regex(/^\d+$/, "ID must be numeric.");
 
@@ -154,7 +164,7 @@ export function createRelationRouter(): Router {
     try {
       const response = await invokeRelation<ListFriendsResponse>("ListFriends", {
         requestId: requestId(req),
-        userId: Number(userId)
+        userId
       });
 
       if (!isOk(response.response)) {
@@ -179,7 +189,7 @@ export function createRelationRouter(): Router {
     try {
       const response = await invokeRelation<ListFriendRequestsResponse>("ListFriendRequests", {
         requestId: requestId(req),
-        userId: Number(userId),
+        userId,
         incoming: parsed.data.incoming,
         status: parsed.data.status,
         page: {
@@ -210,8 +220,8 @@ export function createRelationRouter(): Router {
     try {
       const response = await invokeRelation<SendFriendRequestResponse>("SendFriendRequest", {
         requestId: requestId(req),
-        fromUserId: Number(fromUserId),
-        toUserId: Number(parsed.data.toUserId),
+        fromUserId,
+        toUserId: parsed.data.toUserId,
         message: parsed.data.message
       });
 
@@ -245,8 +255,8 @@ export function createRelationRouter(): Router {
     try {
       const response = await invokeRelation<CommonResponse>("DeleteFriend", {
         requestId: requestId(req),
-        userId: Number(userId),
-        friendId: Number(parsedFriend.data)
+        userId,
+        friendId: parsedFriend.data
       });
 
       if (!isOk(response)) {
@@ -264,10 +274,18 @@ export function createRelationRouter(): Router {
     const userId = authUserId(req);
 
     try {
-      const groups = await listGroupsForUser(userId);
-      res.json({ ok: true, groups });
+      const response = await invokeRelation<ListGroupsResponse>("ListGroups", {
+        requestId: requestId(req),
+        userId,
+        limit: 200
+      });
+      if (!isOk(response.response)) {
+        sendRelationError(res, response.response);
+        return;
+      }
+      res.json({ ok: true, groups: response.groups ?? [] });
     } catch (error) {
-      sendGroupLookupError(res, "Group list is unavailable.", error);
+      sendRpcError(res, "RelationService.ListGroups failed.", error);
     }
   });
 
@@ -279,10 +297,18 @@ export function createRelationRouter(): Router {
     }
 
     try {
-      const groups = await searchGroups(parsed.data.q, parsed.data.limit);
-      res.json({ ok: true, groups });
+      const response = await invokeRelation<ListGroupsResponse>("SearchGroups", {
+        requestId: requestId(req),
+        query: parsed.data.q,
+        limit: parsed.data.limit
+      });
+      if (!isOk(response.response)) {
+        sendRelationError(res, response.response);
+        return;
+      }
+      res.json({ ok: true, groups: response.groups ?? [] });
     } catch (error) {
-      sendGroupLookupError(res, "Group search is unavailable.", error);
+      sendRpcError(res, "RelationService.SearchGroups failed.", error);
     }
   });
 
@@ -297,7 +323,7 @@ export function createRelationRouter(): Router {
     try {
       const response = await invokeRelation<CreateGroupResponse>("CreateGroup", {
         requestId: requestId(req),
-        ownerId: Number(ownerId),
+        ownerId,
         groupName: parsed.data.name
       });
 
@@ -328,20 +354,17 @@ export function createRelationRouter(): Router {
     }
 
     try {
-      const group = await getGroupInfo(parsedGroup.data);
-      if (!group) {
-        res.status(404).json({
-          ok: false,
-          error: {
-            code: "GROUP_NOT_FOUND",
-            message: "Group was not found."
-          }
-        });
+      const response = await invokeRelation<GetGroupResponse>("GetGroup", {
+        requestId: requestId(req),
+        groupId: parsedGroup.data
+      });
+      if (!isOk(response.response)) {
+        sendRelationError(res, response.response);
         return;
       }
-      res.json({ ok: true, group });
+      res.json({ ok: true, group: response.group });
     } catch (error) {
-      sendGroupLookupError(res, "Group lookup is unavailable.", error);
+      sendRpcError(res, "RelationService.GetGroup failed.", error);
     }
   });
 
@@ -354,19 +377,10 @@ export function createRelationRouter(): Router {
     }
 
     try {
-      if (!(await isGroupMember(parsedGroup.data, userId))) {
-        res.status(403).json({
-          ok: false,
-          error: {
-            code: "GROUP_NOT_MEMBER",
-            message: "Group members are only visible to group members."
-          }
-        });
-        return;
-      }
       const response = await invokeRelation<ListGroupMembersResponse>("ListGroupMembers", {
         requestId: requestId(req),
-        groupId: Number(parsedGroup.data)
+        groupId: parsedGroup.data,
+        requesterUserId: userId
       });
 
       if (!isOk(response.response)) {
@@ -383,96 +397,6 @@ export function createRelationRouter(): Router {
   return router;
 }
 
-async function listGroupsForUser(userId: string): Promise<GroupInfo[]> {
-  if (!hasMysqlConfig()) {
-    throw new Error("MySQL group lookup connection is not configured.");
-  }
-
-  const [rows] = await getMysqlPool().execute<GroupRow[]>(
-    `SELECT g.id, g.group_name, g.owner_id, g.created_at, g.updated_at, COUNT(all_members.user_id) AS member_count
-     FROM group_members current_member
-     INNER JOIN \`groups\` g ON g.id = current_member.group_id
-     LEFT JOIN group_members all_members ON all_members.group_id = g.id
-     WHERE current_member.user_id = ?
-     GROUP BY g.id, g.group_name, g.owner_id, g.created_at, g.updated_at
-     ORDER BY g.updated_at DESC, g.id DESC`,
-    [userId]
-  );
-  return rows.map(toGroupInfo);
-}
-
-async function searchGroups(query: string, limit: number): Promise<GroupInfo[]> {
-  if (!hasMysqlConfig()) {
-    throw new Error("MySQL group lookup connection is not configured.");
-  }
-
-  const keyword = query.trim();
-  const likePattern = `%${keyword}%`;
-  const prefixPattern = `${keyword}%`;
-  const exactId = /^\d+$/.test(keyword) ? Number(keyword) : 0;
-  const hasExactId = exactId > 0 ? 1 : 0;
-  const safeLimit = Math.max(1, Math.min(50, Math.floor(limit)));
-  const [rows] = await getMysqlPool().execute<GroupRow[]>(
-    `SELECT g.id, g.group_name, g.owner_id, g.created_at, g.updated_at, COUNT(gm.user_id) AS member_count
-     FROM \`groups\` g
-     LEFT JOIN group_members gm ON gm.group_id = g.id
-     WHERE g.group_name LIKE ?
-        OR (? = 1 AND g.id = ?)
-     GROUP BY g.id, g.group_name, g.owner_id, g.created_at, g.updated_at
-     ORDER BY
-       CASE
-         WHEN g.group_name = ? THEN 0
-         WHEN g.group_name LIKE ? THEN 1
-         ELSE 2
-       END,
-       g.updated_at DESC,
-       g.id DESC
-     LIMIT ${safeLimit}`,
-    [likePattern, hasExactId, exactId, keyword, prefixPattern]
-  );
-  return rows.map(toGroupInfo);
-}
-
-async function getGroupInfo(groupId: string): Promise<GroupInfo | null> {
-  if (!hasMysqlConfig()) {
-    throw new Error("MySQL group lookup connection is not configured.");
-  }
-
-  const [rows] = await getMysqlPool().execute<GroupRow[]>(
-    `SELECT g.id, g.group_name, g.owner_id, g.created_at, g.updated_at, COUNT(gm.user_id) AS member_count
-     FROM \`groups\` g
-     LEFT JOIN group_members gm ON gm.group_id = g.id
-     WHERE g.id = ?
-     GROUP BY g.id, g.group_name, g.owner_id, g.created_at, g.updated_at
-     LIMIT 1`,
-    [groupId]
-  );
-  return rows[0] ? toGroupInfo(rows[0]) : null;
-}
-
-async function isGroupMember(groupId: string, userId: string): Promise<boolean> {
-  if (!hasMysqlConfig()) {
-    throw new Error("MySQL group membership lookup connection is not configured.");
-  }
-
-  const [rows] = await getMysqlPool().execute<RowDataPacket[]>(
-    "SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ? LIMIT 1",
-    [groupId, userId]
-  );
-  return rows.length > 0;
-}
-
-function toGroupInfo(row: GroupRow): GroupInfo {
-  return {
-    groupId: String(row.id),
-    name: row.group_name,
-    ownerId: String(row.owner_id),
-    memberCount: Number(row.member_count ?? 0),
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at)
-  };
-}
-
 async function handleFriendRequestAction(req: express.Request, res: express.Response, method: "AcceptFriendRequest" | "RejectFriendRequest") {
   const parsedRequest = numericIdSchema.safeParse(req.params.requestId);
   const userId = authUserId(req);
@@ -484,8 +408,8 @@ async function handleFriendRequestAction(req: express.Request, res: express.Resp
   try {
     const response = await invokeRelation<CommonResponse>(method, {
       requestId: requestId(req),
-      userId: Number(userId),
-      friendRequestId: Number(parsedRequest.data)
+      userId,
+      friendRequestId: parsedRequest.data
     });
 
     if (!isOk(response)) {
@@ -510,8 +434,8 @@ async function handleGroupUserAction(req: express.Request, res: express.Response
   try {
     const response = await invokeRelation<CommonResponse>(method, {
       requestId: requestId(req),
-      userId: Number(userId),
-      groupId: Number(parsedGroup.data)
+      userId,
+      groupId: parsedGroup.data
     });
 
     if (!isOk(response)) {
@@ -555,7 +479,8 @@ function getRelationClient(): RelationGrpcClient {
 
   cachedClient = new RelationService(
     `${config.relationServiceHost}:${config.relationServicePort}`,
-    grpc.credentials.createInsecure()
+    grpcChannelCredentials(),
+    grpcChannelOptions()
   );
   return cachedClient;
 }
@@ -594,17 +519,6 @@ function sendRpcError(res: express.Response, message: string, error: unknown) {
     ok: false,
     error: {
       code: "RELATION_SERVICE_UNAVAILABLE",
-      message: error instanceof Error ? error.message : message
-    }
-  });
-}
-
-function sendGroupLookupError(res: express.Response, message: string, error: unknown) {
-  logger.warn(message, { detail: error });
-  res.status(503).json({
-    ok: false,
-    error: {
-      code: "GROUP_LOOKUP_UNAVAILABLE",
       message: error instanceof Error ? error.message : message
     }
   });

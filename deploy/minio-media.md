@@ -49,6 +49,8 @@ S3_FORCE_PATH_STYLE=true
 
 Do not commit the generated access key or secret key.
 
+MinIO administrative credentials are generated separately in `/opt/nebulaim-data/minio.env` with mode `0600`. The Bridge user is attached to a bucket-scoped policy that permits listing, reading and writing only `nebulaim-media`; it is not a MinIO root user. Container images are pinned by digest.
+
 ### Backups
 
 Back up both:
@@ -110,6 +112,8 @@ S3_FORCE_PATH_STYLE=true
 ```
 
 不要把生成的 access key 或 secret key 提交到仓库。
+
+MinIO 管理凭据单独生成在 `/opt/nebulaim-data/minio.env`，文件权限为 `0600`。Bridge 使用的用户只拥有 `nebulaim-media` Bucket 的列举、读取和写入权限，不是 MinIO root 用户。容器镜像通过摘要固定版本。
 
 ### 备份
 

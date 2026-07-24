@@ -93,7 +93,7 @@ export function createAuthRouter(): Router {
     try {
       const response = await invokeGetUserInfo({
         requestId,
-        userId: Number(parsed.data)
+        userId: parsed.data
       });
 
       if (response.response.code !== 0 || !response.user) {
@@ -156,7 +156,7 @@ export function createAuthRouter(): Router {
         return;
       }
 
-      logger.info(`User registered username=${parsed.data.username} user=${response.userId}`);
+      logger.info(`User registered user=${response.userId}`);
       res.json({
         ok: true,
         userId: response.userId,
@@ -207,7 +207,7 @@ export function createAuthRouter(): Router {
         return;
       }
 
-      logger.info(`Token refreshed user=${response.userId} token=${tokenPrefix(response.token)}...`);
+      logger.info(`Token refreshed user=${response.userId}`);
       res.json({
         ok: true,
         userId: response.userId,
@@ -227,8 +227,4 @@ export function createAuthRouter(): Router {
   });
 
   return router;
-}
-
-function tokenPrefix(token: string) {
-  return token.length <= 8 ? token : token.slice(0, 8);
 }

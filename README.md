@@ -28,7 +28,7 @@ The browser does not send JSON to the Gateway. Browser-safe HTTP routes are expo
 ### User Interface
 
 - `/` product entry page.
-- `/login` login through Gateway `LOGIN_REQ`.
+- `/login` login through Gateway `LOGIN_REQ`; persisted sessions reconnect with `RESUME_SESSION_REQ`.
 - `/register` registration through Gateway `REGISTER_REQ`.
 - `/app/chat` friend chat, group chat, image messages, Gateway heartbeat, ACK status and pushed messages.
 - `/app/contacts` friends, username or user ID friend requests, incoming requests and outgoing requests.
@@ -115,6 +115,18 @@ PAGES_GATEWAY_WS_URL=wss://<bridge-host>/ws
 
 The app includes a `404.html` single-page fallback so direct links such as `/NebulaIM-Web/login` route correctly on GitHub Pages. Proto assets are loaded relative to `import.meta.env.BASE_URL`, so Pages sub-path deployment uses `/NebulaIM-Web/proto/*.proto`.
 
+### Production Deployment Variables
+
+The server deployment workflow requires these GitHub environment secrets:
+
+```text
+DEPLOY_SSH_KEY   private key for the deployment account
+DEPLOY_HOST_KEY  verified known_hosts line for the target host and port
+DEPLOY_HOST      target DNS name or IP
+```
+
+Set `DEPLOY_USER` and optional `DEPLOY_PORT` as secrets or variables. Set `DEPLOY_PATH` and `DEPLOY_SERVICE` as variables when their defaults are not suitable. `DEPLOY_PORT` must be in `1..65535`, `DEPLOY_PATH` must be a plain absolute path below `/opt`, and the service name may contain only systemd unit-name characters. The deployment account must be a non-root SSH user with passwordless sudo for the deployment commands. The runtime process uses the dedicated `nebulaim-web` system account. Releases are prepared in a staging directory; if any directory activation or service health check fails, the workflow restores each replaced component from its previous copy.
+
 ### Bridge HTTP API
 
 The Bridge exposes HTTP routes over backend gRPC services. Except for `GET /health`, `GET /info`, `WS /ws`, `POST /api/auth/register`, and `POST /api/auth/refresh`, browser API calls require `Authorization: Bearer <NebulaIM token>`. User-owned routes derive the current user from that token.
@@ -144,7 +156,7 @@ GET  /api/relation/groups/:groupId
 GET  /api/relation/groups/:groupId/members
 
 GET  /api/conversations
-POST /api/conversations/:conversationId/read
+POST /api/conversations/:conversationId/read  body: {"upToMessageId":"..."}
 
 GET  /api/devices
 POST /api/devices/:deviceId/kick
@@ -153,7 +165,7 @@ POST /api/devices/kick-all
 POST /api/uploads/images
 POST /api/messages/single
 POST /api/messages/group
-GET  /api/messages/conversations/:conversationId
+GET  /api/messages/conversations/:conversationId?limit=50&before=<timestamp>&beforeMessageId=<id>
 GET  /api/messages/read-state?messageIds=10001,10002
 GET  /media/<object-key>
 
@@ -168,7 +180,7 @@ GET  /api/admin/audit-events
 POST /api/admin/cleanup
 ```
 
-Device routes call DeviceService for the signed-in user's device list and revocation actions. Message, relation, group, conversation, device and upload routes ignore client-supplied current-user IDs and use the authenticated token identity. Message read-state only returns receipt data for messages in conversations owned by the signed-in user. Bridge-to-backend gRPC calls include `INTERNAL_RPC_TOKEN` when configured. Admin routes require `X-Nebula-Admin-Token`. Do not commit raw AdminService tokens.
+Device routes call DeviceService for the signed-in user's device list and revocation actions. Message, relation, group, conversation, device and upload routes use the authenticated token identity. Message history, group membership and read-state authorization are enforced by their owning backend services; the Bridge does not query backend tables. History pages use a `(timestamp, message ID)` cursor, and the chat view exposes earlier pages without changing the user's scroll position. Read-state is visible only to the message sender. Marking a conversation read requires the last visible message ID, so concurrently arriving messages are not cleared accidentally. Bridge-to-backend calls use `INTERNAL_RPC_TOKEN` and support TLS/mTLS through `GRPC_TLS_*`; a non-loopback backend requires TLS. Admin routes require `X-Nebula-Admin-Token`. Do not commit raw tokens or private keys.
 
 Image messages use `POST /api/uploads/images` first. Development can keep files under `UPLOAD_DIR` and serve them from `/uploads/...`. Production uses MinIO through the S3-compatible Bridge storage adapter, stores objects in the `nebulaim-media` bucket, and serves returned URLs from `/media/...`. The frontend sends the returned URL as a `contentType: "image"` message. When a user selects an image and also enters text, one send action sends the image message first and then sends the text message; the current protocol does not create a combined image-plus-text payload.
 
@@ -185,7 +197,7 @@ Bridge storage:       MEDIA_STORAGE_DRIVER=s3
 Public media path:    /media
 ```
 
-GitHub Actions calls this script during deployment. The script starts the MinIO container, creates the bucket, generates missing S3 credentials in `/opt/nebulaim-web/bridge.env`, and leaves credentials out of git. The existing `/uploads` route remains available for local files that were already written before the MinIO migration.
+GitHub Actions calls this script during deployment. The script uses digest-pinned MinIO images, stores root credentials in `/opt/nebulaim-data/minio.env`, creates a separate `nebulaim-media-app` user with access only to the media bucket, and writes only that application credential to `/opt/nebulaim-web/bridge.env`. Both files remain server-local.
 
 ## 中文
 
@@ -213,7 +225,7 @@ MessageService / PushService / UserService
 ### 用户界面
 
 - `/` 产品入口页。
-- `/login` 通过 Gateway `LOGIN_REQ` 登录。
+- `/login` 通过 Gateway `LOGIN_REQ` 登录；持久化会话重连时使用 `RESUME_SESSION_REQ`。
 - `/register` 通过 Gateway `REGISTER_REQ` 注册。
 - `/app/chat` 好友聊天、群聊、图片消息、Gateway 心跳、ACK 状态和推送消息。
 - `/app/contacts` 好友、按用户名或用户 ID 发送好友请求、收到的请求和发出的请求。
@@ -300,6 +312,18 @@ PAGES_GATEWAY_WS_URL=wss://<bridge-host>/ws
 
 应用包含 `404.html` 单页 fallback，因此 `/NebulaIM-Web/login` 这种直接访问链接可以在 GitHub Pages 上正确路由。Proto 资源基于 `import.meta.env.BASE_URL` 加载，所以 Pages 子路径部署会请求 `/NebulaIM-Web/proto/*.proto`。
 
+### 生产部署变量
+
+服务器部署 workflow 需要以下 GitHub environment secrets：
+
+```text
+DEPLOY_SSH_KEY   部署账号的私钥
+DEPLOY_HOST_KEY  已核验的目标主机和端口 known_hosts 记录
+DEPLOY_HOST      目标域名或 IP
+```
+
+`DEPLOY_USER` 和可选的 `DEPLOY_PORT` 可以配置为 secret 或 variable；默认路径或服务名不适用时，再设置 `DEPLOY_PATH` 和 `DEPLOY_SERVICE` variables。`DEPLOY_PORT` 必须位于 `1..65535`，`DEPLOY_PATH` 必须是 `/opt` 下不含 shell 特殊字符的绝对路径，服务名只能使用 systemd unit 名称允许的字符。SSH 部署账号应是具备部署命令免密 sudo 权限的非 root 用户，运行时进程固定使用专用的 `nebulaim-web` 系统账号。发布先写入暂存目录；任一目录切换或服务健康检查失败时，workflow 会逐项恢复上一份内容。
+
 ### Bridge HTTP API
 
 Bridge 通过 HTTP 路由暴露后端 gRPC 服务。除了 `GET /health`、`GET /info`、`WS /ws`、`POST /api/auth/register` 和 `POST /api/auth/refresh`，浏览器业务 API 都需要 `Authorization: Bearer <NebulaIM token>`。用户相关路由会从 token 解析当前用户。
@@ -329,7 +353,7 @@ GET  /api/relation/groups/:groupId
 GET  /api/relation/groups/:groupId/members
 
 GET  /api/conversations
-POST /api/conversations/:conversationId/read
+POST /api/conversations/:conversationId/read  body: {"upToMessageId":"..."}
 
 GET  /api/devices
 POST /api/devices/:deviceId/kick
@@ -338,7 +362,7 @@ POST /api/devices/kick-all
 POST /api/uploads/images
 POST /api/messages/single
 POST /api/messages/group
-GET  /api/messages/conversations/:conversationId
+GET  /api/messages/conversations/:conversationId?limit=50&before=<timestamp>&beforeMessageId=<id>
 GET  /api/messages/read-state?messageIds=10001,10002
 GET  /media/<object-key>
 
@@ -353,7 +377,7 @@ GET  /api/admin/audit-events
 POST /api/admin/cleanup
 ```
 
-设备路由调用 DeviceService 获取设备列表和踢出设备。消息、关系、群组、会话、设备和上传路由会忽略客户端传来的当前用户 ID，统一使用 token 解析出的身份。消息 read-state 只返回当前登录用户拥有的会话中的消息回执。Bridge 到后端的 gRPC 调用会在配置后携带 `INTERNAL_RPC_TOKEN`。Admin 路由需要 `X-Nebula-Admin-Token`。不要提交明文 AdminService token。
+设备路由调用 DeviceService 获取设备列表和踢出设备。消息、关系、群组、会话、设备和上传路由统一使用 token 解析出的身份。消息历史、群成员权限和回执权限由对应后端服务校验，Bridge 不直接查询后端数据表。历史分页使用“时间戳 + 消息 ID”复合游标，聊天区可以继续加载更早消息且不会改变当前滚动位置。消息回执只允许发送者查看；标记会话已读必须提交当前最后可见消息 ID，避免把并发到达的新消息误清零。Bridge 到后端的调用使用 `INTERNAL_RPC_TOKEN`，并通过 `GRPC_TLS_*` 支持 TLS/mTLS；后端地址不是本机回环地址时必须启用 TLS。Admin 路由需要 `X-Nebula-Admin-Token`。不要提交 token 或私钥。
 
 图片消息会先调用 `POST /api/uploads/images`。开发环境可以继续把文件保存到 `UPLOAD_DIR` 并通过 `/uploads/...` 访问。生产环境通过 Bridge 的 S3 兼容存储适配器上传到 MinIO，图片对象保存在 `nebulaim-media` bucket 中，并通过 `/media/...` 返回给前端。前端再把返回的 URL 作为 `contentType: "image"` 消息发送。当用户选择图片并输入文字时，一次发送动作会先发送图片消息，再发送文字消息；当前协议不生成图片加文字的复合消息体。
 
@@ -370,4 +394,4 @@ Bridge 存储：    MEDIA_STORAGE_DRIVER=s3
 媒体访问路径：   /media
 ```
 
-GitHub Actions 部署时会调用这个脚本。脚本会启动 MinIO 容器、创建 bucket、在 `/opt/nebulaim-web/bridge.env` 中生成缺失的 S3 凭据，并且不会把凭据写入 git。已有的 `/uploads` 路由会继续保留，用来访问迁移到 MinIO 前仍存在的本地文件。
+GitHub Actions 部署时会调用这个脚本。脚本使用固定摘要的 MinIO 镜像，把 root 凭据保存在 `/opt/nebulaim-data/minio.env`，并创建只能访问媒体 Bucket 的 `nebulaim-media-app` 用户。Bridge 环境文件只保存这个应用用户的凭据，两个凭据文件都只存在于服务器。

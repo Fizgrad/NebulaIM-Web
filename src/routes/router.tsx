@@ -1,15 +1,35 @@
+import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
-import { AppShell } from "../components/layout/AppShell";
-import { LandingPage } from "../pages/LandingPage";
-import { LoginPage } from "../pages/LoginPage";
-import { RegisterPage } from "../pages/RegisterPage";
-import { ChatPage } from "../pages/ChatPage";
-import { ContactsPage } from "../pages/ContactsPage";
-import { GroupsPage } from "../pages/GroupsPage";
-import { ProfilePage } from "../pages/ProfilePage";
-import { SettingsPage } from "../pages/SettingsPage";
-import { DashboardPage } from "../pages/DashboardPage";
-import { AdminPage } from "../pages/AdminPage";
+
+function lazyNamed<TModule, TName extends keyof TModule>(loader: () => Promise<TModule>, name: TName) {
+  return lazy(async () => ({ default: (await loader())[name] as ComponentType<Record<string, unknown>> }));
+}
+
+const AppShell = lazyNamed(() => import("../components/layout/AppShell"), "AppShell");
+const LandingPage = lazyNamed(() => import("../pages/LandingPage"), "LandingPage");
+const LoginPage = lazyNamed(() => import("../pages/LoginPage"), "LoginPage");
+const RegisterPage = lazyNamed(() => import("../pages/RegisterPage"), "RegisterPage");
+const ChatPage = lazyNamed(() => import("../pages/ChatPage"), "ChatPage");
+const ContactsPage = lazyNamed(() => import("../pages/ContactsPage"), "ContactsPage");
+const GroupsPage = lazyNamed(() => import("../pages/GroupsPage"), "GroupsPage");
+const ProfilePage = lazyNamed(() => import("../pages/ProfilePage"), "ProfilePage");
+const SettingsPage = lazyNamed(() => import("../pages/SettingsPage"), "SettingsPage");
+const DashboardPage = lazyNamed(() => import("../pages/DashboardPage"), "DashboardPage");
+const AdminPage = lazyNamed(() => import("../pages/AdminPage"), "AdminPage");
+
+function routeElement(element: ReactNode) {
+  return (
+    <Suspense
+      fallback={
+        <div className="grid min-h-dvh place-items-center bg-nebula-bg" role="status" aria-label="Loading">
+          <span className="h-7 w-7 animate-spin rounded-full border-2 border-nebula-border border-t-cyan-400" />
+        </div>
+      }
+    >
+      {element}
+    </Suspense>
+  );
+}
 
 function getRouterBasename() {
   const baseUrl = import.meta.env.BASE_URL;
@@ -31,24 +51,24 @@ function restoreGitHubPagesRedirect() {
 restoreGitHubPagesRedirect();
 
 export const router = createBrowserRouter([
-  { path: "/", element: <LandingPage /> },
-  { path: "/login", element: <LoginPage /> },
-  { path: "/register", element: <RegisterPage /> },
+  { path: "/", element: routeElement(<LandingPage />) },
+  { path: "/login", element: routeElement(<LoginPage />) },
+  { path: "/register", element: routeElement(<RegisterPage />) },
   {
     path: "/app",
-    element: <AppShell />,
+    element: routeElement(<AppShell />),
     children: [
       { index: true, element: <Navigate to="/app/chat" replace /> },
-      { path: "chat", element: <ChatPage /> },
-      { path: "contacts", element: <ContactsPage /> },
-      { path: "groups", element: <GroupsPage /> },
-      { path: "dashboard", element: <DashboardPage embedded /> },
-      { path: "profile", element: <ProfilePage /> },
-      { path: "settings", element: <SettingsPage /> }
+      { path: "chat", element: routeElement(<ChatPage />) },
+      { path: "contacts", element: routeElement(<ContactsPage />) },
+      { path: "groups", element: routeElement(<GroupsPage />) },
+      { path: "dashboard", element: routeElement(<DashboardPage embedded />) },
+      { path: "profile", element: routeElement(<ProfilePage />) },
+      { path: "settings", element: routeElement(<SettingsPage />) }
     ]
   },
-  { path: "/dashboard", element: <DashboardPage /> },
-  { path: "/admin", element: <AdminPage /> },
+  { path: "/dashboard", element: routeElement(<DashboardPage />) },
+  { path: "/admin", element: routeElement(<AdminPage />) },
   { path: "*", element: <Navigate to="/" replace /> }
 ], {
   basename: getRouterBasename()

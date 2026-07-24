@@ -20,6 +20,8 @@ const MessageType = {
   LOGIN_RESP: 1002,
   REGISTER_REQ: 1003,
   REGISTER_RESP: 1004,
+  RESUME_SESSION_REQ: 1005,
+  RESUME_SESSION_RESP: 1006,
   HEARTBEAT_REQ: 1101,
   HEARTBEAT_RESP: 1102,
   SEND_SINGLE_MSG_REQ: 2001,
@@ -34,7 +36,6 @@ const MessageType = {
   ERROR_RESP: 9001
 } as const;
 
-const GATEWAY_ONLINE_STATE_FAILED = 10006;
 const UINT64_PATTERN = /^\d+$/;
 
 type DirectGatewayClientOptions = {
@@ -70,6 +71,11 @@ type ProtoLoginResponse = {
   expireAt: string | number;
 };
 
+type ProtoResumeSessionResponse = {
+  response: ProtoCommonResponse;
+  userId: string;
+};
+
 type ProtoSendMessageResponse = {
   response: ProtoCommonResponse;
   messageId: string;
@@ -91,7 +97,23 @@ type ProtoMessageData = {
   contentType: string | number;
   timestamp: string | number;
   serverTimestamp?: string | number;
+  recalled?: boolean;
+  recalledAt?: string | number;
 };
+
+export class GatewayOperationError extends Error {
+  constructor(
+    message: string,
+    readonly code: number
+  ) {
+    super(message);
+    this.name = "GatewayOperationError";
+  }
+}
+
+export function isExpiredGatewaySession(error: unknown) {
+  return error instanceof GatewayOperationError && [3000, 3001, 3007].includes(error.code);
+}
 
 export class DirectGatewayClient implements GatewayClient {
   private ws?: WebSocket;
@@ -112,6 +134,11 @@ export class DirectGatewayClient implements GatewayClient {
 
   constructor(private readonly options: DirectGatewayClientOptions) {}
 
+  setSession(token: string, userId: string): void {
+    this.token = token;
+    this.userId = userId;
+  }
+
   connect(): Promise<void> {
     if (this.ws?.readyState === WebSocket.OPEN) return Promise.resolve();
     if (this.connectPromise) return this.connectPromise;
@@ -123,21 +150,51 @@ export class DirectGatewayClient implements GatewayClient {
       const ws = new WebSocket(this.options.wsUrl);
       ws.binaryType = "arraybuffer";
       this.ws = ws;
+      let settled = false;
+
+      const resolveConnection = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const rejectConnection = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
 
       const timeout = window.setTimeout(() => {
         this.connectPromise = undefined;
-        reject(new Error("Gateway WebSocket connection timeout."));
+        rejectConnection(new Error("Gateway WebSocket connection timeout."));
         ws.close();
       }, 8000);
 
       ws.onopen = () => {
         window.clearTimeout(timeout);
-        this.reconnectAttempts = 0;
-        this.connectedAt = Date.now();
-        this.connectPromise = undefined;
-        this.emitStatus({ state: "connected", heartbeatOk: true, latency: this.latency, connectedAt: this.connectedAt });
-        this.startHeartbeat();
-        resolve();
+        void this.finishConnectionOpen()
+          .then(() => {
+            this.reconnectAttempts = 0;
+            this.connectedAt = Date.now();
+            this.connectPromise = undefined;
+            this.emitStatus({ state: "connected", heartbeatOk: true, latency: this.latency, connectedAt: this.connectedAt });
+            this.startHeartbeat();
+            resolveConnection();
+          })
+          .catch((error) => {
+            this.connectPromise = undefined;
+            const sessionExpired = isExpiredGatewaySession(error);
+            this.manualClose = sessionExpired;
+            const message = error instanceof Error ? error.message : "Gateway session resume failed.";
+            this.emitStatus({
+              state: "disconnected",
+              heartbeatOk: false,
+              latency: this.latency,
+              error: message,
+              sessionExpired
+            });
+            rejectConnection(error instanceof Error ? error : new Error(message));
+            ws.close();
+          });
       };
       ws.onmessage = (event) => void this.handleMessage(event.data);
       ws.onerror = () => {
@@ -149,6 +206,7 @@ export class DirectGatewayClient implements GatewayClient {
         this.stopHeartbeat();
         this.rejectPending("Gateway WebSocket disconnected.");
         this.emitStatus({ state: "disconnected", heartbeatOk: false, latency: this.latency, error: "Gateway WebSocket disconnected." });
+        rejectConnection(new Error("Gateway WebSocket disconnected."));
         if (!this.manualClose && this.options.autoReconnect) this.scheduleReconnect();
       };
     });
@@ -364,7 +422,8 @@ export class DirectGatewayClient implements GatewayClient {
       return Promise.reject(new Error("Gateway WebSocket is not connected."));
     }
 
-    const sequenceId = this.sequenceId++;
+    const sequenceId = this.sequenceId;
+    this.sequenceId = this.sequenceId >= 0xffff_ffff ? 1 : this.sequenceId + 1;
     const frame = this.codec.encode({ type, sequenceId, body });
     this.ws.send(frame);
 
@@ -444,7 +503,9 @@ export class DirectGatewayClient implements GatewayClient {
       contentType: fromProtoContentType(payload.contentType),
       status: "delivered",
       createdAt: Number(payload.serverTimestamp || payload.timestamp || Date.now()),
-      isMine: fromUserId === this.userId
+      isMine: fromUserId === this.userId,
+      recalled: Boolean(payload.recalled),
+      recalledAt: Number(payload.recalledAt ?? 0)
     };
   }
 
@@ -471,6 +532,31 @@ export class DirectGatewayClient implements GatewayClient {
     }, waitMs);
   }
 
+  private async finishConnectionOpen(): Promise<void> {
+    if (!this.token) return;
+    const payload = await this.request<ProtoResumeSessionResponse>(
+      MessageType.RESUME_SESSION_REQ,
+      MessageType.RESUME_SESSION_RESP,
+      "nebula.proto.ResumeSessionRequest",
+      {
+        requestId: this.requestId("resume-session"),
+        token: this.token,
+        deviceId: currentDeviceId(),
+        platform: "web",
+        deviceName: "NebulaIM Web"
+      },
+      "nebula.proto.ResumeSessionResponse"
+    );
+    this.assertOk(payload.response, "ResumeSession");
+    if (!payload.userId || payload.userId === "0") {
+      throw new Error("ResumeSession returned an invalid user.");
+    }
+    if (this.userId && payload.userId !== this.userId) {
+      throw new Error("ResumeSession returned a different user.");
+    }
+    this.userId = payload.userId;
+  }
+
   private rejectPending(message: string): void {
     for (const [id, pending] of this.pending) {
       window.clearTimeout(pending.timer);
@@ -481,23 +567,14 @@ export class DirectGatewayClient implements GatewayClient {
 
   private assertOk(response: ProtoCommonResponse | undefined, operation: string): void {
     if (!response) throw new Error(`${operation} returned an empty response.`);
-    if (response.code !== 0) throw new Error(response.message || `${operation} failed with code ${response.code}.`);
+    if (response.code !== 0) {
+      throw new GatewayOperationError(response.message || `${operation} failed with code ${response.code}.`, response.code);
+    }
   }
 
   private assertLoginOk(response: ProtoCommonResponse | undefined): void {
     if (!response) throw new Error("Login returned an empty response.");
     if (response.code === 0) return;
-    if (response.code === GATEWAY_ONLINE_STATE_FAILED) {
-      clientLogger.warn("Login succeeded but Gateway online state update failed", response);
-      this.emitStatus({
-        state: "connected",
-        heartbeatOk: false,
-        latency: this.latency,
-        connectedAt: this.connectedAt,
-        error: response.message || "Gateway online state failed."
-      });
-      return;
-    }
     throw new Error(response.message || `Login failed with code ${response.code}.`);
   }
 

@@ -7,6 +7,7 @@ import type { GatewayStatus } from "../services/gatewayClient";
 import { useAuthStore } from "./authStore";
 import { createId } from "../utils/id";
 import { getGatewayClient } from "../services/gatewayClient";
+import { isExpiredGatewaySession } from "../services/directGatewayClient";
 import { useSettingsStore } from "./settingsStore";
 import { useContactStore } from "./contactStore";
 import { useGroupStore } from "./groupStore";
@@ -27,6 +28,16 @@ import {
 import { translate, type TranslationKey } from "../i18n";
 
 type MessagesByConversationId = Record<string, Message[]>;
+type MessageHistoryState = {
+  nextCursor: {
+    before: number;
+    beforeMessageId: string;
+  } | null;
+  hasMore: boolean;
+  loadingOlder: boolean;
+  olderPageRevision: number;
+};
+type MessageHistoryByConversationId = Record<string, MessageHistoryState>;
 
 const resolvedUsers = new Map<string, User>();
 const resolvedGroups = new Map<string, Group>();
@@ -42,16 +53,18 @@ type ChatState = {
   conversations: Conversation[];
   activeConversationId: string | null;
   messagesByConversationId: MessagesByConversationId;
+  messageHistoryByConversationId: MessageHistoryByConversationId;
   gatewayStatus: GatewayStatus;
   setActiveConversationId: (conversationId: string | null) => void;
   loadConversations: () => Promise<void>;
   loadMessages: (conversationId: string) => Promise<void>;
+  loadOlderMessages: (conversationId: string) => Promise<void>;
   refreshReadState: (conversationId: string) => Promise<void>;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   sendImageMessage: (conversationId: string, file: File) => Promise<void>;
   retryMessage: (conversationId: string, messageId: string) => Promise<void>;
   receiveMessage: (message: Message) => void;
-  markConversationRead: (conversationId: string) => Promise<void>;
+  markConversationRead: (conversationId: string, upToMessageId?: string) => Promise<void>;
   updateMessageStatus: (conversationId: string, messageId: string, status: MessageStatus) => void;
   openConversationForUser: (user: User) => string;
   openConversationForGroup: (group: Group) => string;
@@ -220,6 +233,7 @@ function mapBackendConversation(item: BackendConversationInfo, friendById: Map<s
     avatar: friend?.avatar,
     online: isGroup ? undefined : friend ? friend.status === "online" : false,
     lastMessage: conversationPreviewFromBackend(item.lastMessagePreview),
+    lastMessageId: item.lastMessageId,
     lastMessageAt: Number(item.lastMessageAt || item.updatedAt || Date.now()),
     unreadCount: item.unreadCount,
     pinned: item.pinned,
@@ -256,6 +270,7 @@ function isImageUrl(value: string) {
 
 function conversationPreviewFromBackend(preview: string) {
   if (!preview) return tr("store.noMessagesYet");
+  if (preview === "__NEBULA_MESSAGE_RECALLED__") return tr("store.messageRecalled");
   return isImageUrl(preview) ? tr("store.imageMessage") : preview;
 }
 
@@ -276,7 +291,9 @@ function mapBridgeMessage(item: BridgeMessageInfo, conversationId: string, curre
     contentType: item.recalled ? "text" : messageContentTypeFromBackend(item.contentType),
     status: messageStatusFromBackend(item.status, isMine),
     createdAt: Number(item.createdAt || Date.now()),
-    isMine
+    isMine,
+    recalled: item.recalled,
+    recalledAt: Number(item.recalledAt ?? 0)
   };
 }
 
@@ -314,7 +331,6 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
     }
     const result = await sendBridgeGroupMessage(settings.bridgeHttpUrl, userId, conversation.groupId, message.content, sequenceId, message.contentType);
     updateStatus("sent");
-    updateStatus("delivered");
     return result;
   } else {
     if (!isNumericId(conversation.targetUserId)) {
@@ -322,7 +338,6 @@ async function deliverMessage(conversation: Conversation, message: Message, upda
     }
     const result = await sendBridgeSingleMessage(settings.bridgeHttpUrl, userId, conversation.targetUserId, message.content, sequenceId, message.contentType);
     updateStatus("sent");
-    updateStatus("delivered");
     return result;
   }
 }
@@ -340,6 +355,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   activeConversationId: null,
   messagesByConversationId: {},
+  messageHistoryByConversationId: {},
   gatewayStatus: {
     state: "disconnected",
     heartbeatOk: false,
@@ -349,8 +365,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ activeConversationId });
     if (activeConversationId) {
       void (async () => {
-        await get().markConversationRead(activeConversationId);
         await get().loadMessages(activeConversationId);
+        await get().markConversationRead(activeConversationId);
         await get().loadConversations();
       })().catch((error) => {
         clientLogger.warn("Open conversation failed", error);
@@ -452,11 +468,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!conversation?.backendConversationId || !isNumericId(userId)) return;
 
     const history = await listBridgeConversationMessages(settings.bridgeHttpUrl, userId, conversation.backendConversationId);
-    const messages = history.map((item) => mapBridgeMessage(item, conversation.id, userId));
+    const messages = history.messages.map((item) => mapBridgeMessage(item, conversation.id, userId));
     set((state) => ({
       messagesByConversationId: {
         ...state.messagesByConversationId,
         [conversation.id]: mergeMessages(state.messagesByConversationId[conversation.id] ?? [], messages)
+      },
+      messageHistoryByConversationId: {
+        ...state.messageHistoryByConversationId,
+        [conversation.id]:
+          state.messageHistoryByConversationId[conversation.id] ?? {
+            nextCursor: history.nextCursor,
+            hasMore: history.hasMore,
+            loadingOlder: false,
+            olderPageRevision: 0
+          }
       }
     }));
     const missingSenderIds = Array.from(
@@ -485,6 +511,92 @@ export const useChatStore = create<ChatState>((set, get) => ({
       clientLogger.warn("Refresh read state failed", error);
     });
   },
+  loadOlderMessages: async (conversationId) => {
+    const conversation = get().conversations.find((item) => item.id === conversationId);
+    const settings = useSettingsStore.getState();
+    const userId = useAuthStore.getState().user?.id;
+    const historyState = get().messageHistoryByConversationId[conversationId];
+    if (
+      !conversation?.backendConversationId ||
+      !isNumericId(userId) ||
+      !historyState?.hasMore ||
+      !historyState.nextCursor ||
+      historyState.loadingOlder
+    ) {
+      return;
+    }
+
+    set((state) => ({
+      messageHistoryByConversationId: {
+        ...state.messageHistoryByConversationId,
+        [conversationId]: {
+          ...state.messageHistoryByConversationId[conversationId],
+          loadingOlder: true
+        }
+      }
+    }));
+
+    try {
+      const history = await listBridgeConversationMessages(
+        settings.bridgeHttpUrl,
+        userId,
+        conversation.backendConversationId,
+        historyState.nextCursor.before,
+        50,
+        historyState.nextCursor.beforeMessageId
+      );
+      const messages = history.messages.map((item) => mapBridgeMessage(item, conversation.id, userId));
+      set((state) => {
+        const currentHistory = state.messageHistoryByConversationId[conversationId];
+        return {
+          messagesByConversationId: {
+            ...state.messagesByConversationId,
+            [conversationId]: mergeMessages(state.messagesByConversationId[conversationId] ?? [], messages)
+          },
+          messageHistoryByConversationId: {
+            ...state.messageHistoryByConversationId,
+            [conversationId]: {
+              nextCursor: history.nextCursor,
+              hasMore: history.hasMore,
+              loadingOlder: false,
+              olderPageRevision: (currentHistory?.olderPageRevision ?? 0) + 1
+            }
+          }
+        };
+      });
+      const missingSenderIds = Array.from(
+        new Set(messages.map((message) => message.fromUserId).filter((fromUserId) => fromUserId !== userId && !knownUser(fromUserId)))
+      );
+      for (const senderId of missingSenderIds) {
+        void resolveUserWithPresence(settings.bridgeHttpUrl, senderId)
+          .then(rememberUser)
+          .then((user) => {
+            set((state) => ({
+              messagesByConversationId: {
+                ...state.messagesByConversationId,
+                [conversationId]: (state.messagesByConversationId[conversationId] ?? []).map((message) =>
+                  applyUserToMessage(message, user)
+                )
+              }
+            }));
+          })
+          .catch((error) => {
+            clientLogger.warn("Resolve older message sender failed", error);
+          });
+      }
+    } catch (error) {
+      set((state) => ({
+        messageHistoryByConversationId: {
+          ...state.messageHistoryByConversationId,
+          [conversationId]: {
+            ...state.messageHistoryByConversationId[conversationId],
+            loadingOlder: false
+          }
+        }
+      }));
+      throw error;
+    }
+  },
   refreshReadState: async (conversationId) => {
     const conversation = get().conversations.find((item) => item.id === conversationId);
     const settings = useSettingsStore.getState();
@@ -511,8 +623,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const peerStates = states.filter((stateItem) => String(stateItem.userId) !== String(currentUserId));
           if (peerStates.length === 0) return message;
           const anyRead = peerStates.some((stateItem) => Number(stateItem.readAt) > 0);
-          if (!anyRead) return message;
-          return { ...message, status: "read" as MessageStatus };
+          if (anyRead) return { ...message, status: "read" as MessageStatus };
+          const anyDelivered = peerStates.some((stateItem) => Number(stateItem.deliveredAt) > 0);
+          if (anyDelivered) return { ...message, status: "delivered" as MessageStatus };
+          return message;
         });
         return {
           messagesByConversationId: {
@@ -666,15 +780,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const group = knownGroup(message.groupId);
     set((state) => {
       const conversationId = message.conversationId || conversationIdForIncoming(message);
-      const normalizedMessage = {
+      const normalizedMessage: Message = {
         ...message,
         conversationId,
         senderName: senderUser?.nickname ?? message.senderName,
-        senderAvatar: senderUser?.avatar ?? message.senderAvatar
+        senderAvatar: senderUser?.avatar ?? message.senderAvatar,
+        content: message.recalled ? tr("store.messageRecalled") : message.content,
+        contentType: message.recalled ? "text" : message.contentType
       };
+      const existingMessages = state.messagesByConversationId[conversationId] ?? [];
+      const alreadySeen = existingMessages.some((item) => item.id === normalizedMessage.id);
       const existingConversation = state.conversations.find((conversation) => conversation.id === conversationId);
       const isActive = state.activeConversationId === conversationId;
-      const shouldCountUnread = !normalizedMessage.isMine && !isActive;
+      const shouldCountUnread = !normalizedMessage.isMine && !isActive && !alreadySeen && !normalizedMessage.recalled;
+      const eventTime = normalizedMessage.recalledAt || normalizedMessage.createdAt;
       let conversations: Conversation[];
       if (existingConversation) {
         conversations = state.conversations.map((conversation) =>
@@ -683,8 +802,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 ...conversation,
                 title: group ? group.name : conversation.title,
                 online: message.groupId ? conversation.online : senderUser ? senderUser.status === "online" : conversation.online ?? false,
-                lastMessage: messagePreview(message.content, message.contentType),
-                lastMessageAt: message.createdAt,
+                lastMessage:
+                  !normalizedMessage.recalled || !conversation.lastMessageId || conversation.lastMessageId === normalizedMessage.id
+                    ? messagePreview(normalizedMessage.content, normalizedMessage.contentType)
+                    : conversation.lastMessage,
+                lastMessageId: normalizedMessage.recalled
+                  ? conversation.lastMessageId ?? normalizedMessage.id
+                  : normalizedMessage.id,
+                lastMessageAt:
+                  !normalizedMessage.recalled || !conversation.lastMessageId || conversation.lastMessageId === normalizedMessage.id
+                    ? eventTime
+                    : conversation.lastMessageAt,
                 unreadCount: shouldCountUnread ? conversation.unreadCount + 1 : conversation.unreadCount
               }
             : conversation
@@ -696,8 +824,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           title: message.groupId ? groupConversationTitle(message.groupId) : senderUser?.nickname ?? directConversationTitle(message.fromUserId),
           avatar: senderUser?.avatar,
           online: message.groupId ? undefined : senderUser ? senderUser.status === "online" : false,
-          lastMessage: messagePreview(message.content, message.contentType),
-          lastMessageAt: message.createdAt,
+          lastMessage: messagePreview(normalizedMessage.content, normalizedMessage.contentType),
+          lastMessageId: normalizedMessage.id,
+          lastMessageAt: eventTime,
           unreadCount: shouldCountUnread ? 1 : 0,
           targetUserId: message.groupId ? undefined : message.fromUserId,
           groupId: message.groupId
@@ -707,7 +836,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return {
         messagesByConversationId: {
           ...state.messagesByConversationId,
-          [conversationId]: [...(state.messagesByConversationId[conversationId] ?? []), normalizedMessage]
+          [conversationId]: mergeMessages(existingMessages, [normalizedMessage])
         },
         conversations: sortConversations(conversations)
       };
@@ -759,7 +888,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
     if (!message.isMine && get().activeConversationId === conversationId) {
-      await get().markConversationRead(conversationId).catch((error) => {
+      await get().markConversationRead(conversationId, message.id).catch((error) => {
         clientLogger.warn("Mark active incoming conversation read failed", error);
       });
     }
@@ -771,18 +900,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
         clientLogger.warn("Reload conversations after incoming message failed", error);
       });
   },
-  markConversationRead: async (conversationId) => {
+  markConversationRead: async (conversationId, upToMessageId) => {
     const conversation = get().conversations.find((item) => item.id === conversationId);
     const settings = useSettingsStore.getState();
     const userId = useAuthStore.getState().user?.id;
+    const readCursor =
+      upToMessageId ??
+      [...(get().messagesByConversationId[conversationId] ?? [])]
+        .reverse()
+        .find((message) => !message.id.startsWith("local_") && isNumericId(message.id))?.id;
+    if (conversation?.backendConversationId && isNumericId(userId)) {
+      if (!readCursor) return;
+      await markBridgeConversationRead(settings.bridgeHttpUrl, userId, conversation.backendConversationId, readCursor);
+    }
     set((state) => ({
-      conversations: state.conversations.map((conversation) =>
-        conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation
+      conversations: state.conversations.map((item) =>
+        item.id === conversationId ? { ...item, unreadCount: 0 } : item
       )
     }));
-    if (conversation?.backendConversationId && isNumericId(userId)) {
-      await markBridgeConversationRead(settings.bridgeHttpUrl, userId, conversation.backendConversationId);
-    }
   },
   updateMessageStatus: (conversationId, messageId, status) => {
     set((state) => ({
@@ -838,12 +973,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
     get().setActiveConversationId(conversation.id);
     return conversation.id;
   },
-  setGatewayStatus: (gatewayStatus) => set({ gatewayStatus }),
+  setGatewayStatus: (gatewayStatus) => {
+    set({ gatewayStatus });
+    if (gatewayStatus.sessionExpired) {
+      useAuthStore.getState().logout();
+      get().clearLocalChat();
+    }
+  },
   startGatewaySession: async () => {
     const gateway = getGatewayClient();
+    const auth = useAuthStore.getState();
+    if (!auth.token || !auth.user?.id) {
+      auth.logout();
+      throw new Error(tr("store.sessionExpired"));
+    }
+    gateway.setSession(auth.token, auth.user.id);
     gateway.onMessage(get().receiveMessage);
     gateway.onStatusChange(get().setGatewayStatus);
-    await gateway.connect();
+    try {
+      await gateway.connect();
+    } catch (error) {
+      if (isExpiredGatewaySession(error)) {
+        useAuthStore.getState().logout();
+      }
+      throw error;
+    }
     try {
       await useContactStore.getState().loadFriends();
     } catch (error) {
@@ -862,6 +1016,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       conversations: [],
       activeConversationId: null,
-      messagesByConversationId: {}
+      messagesByConversationId: {},
+      messageHistoryByConversationId: {}
     })
 }));
