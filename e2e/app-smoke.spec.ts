@@ -110,7 +110,7 @@ test("theme controls apply dark light and system modes", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
-test("browser protobuf registry loads and encodes Gateway messages", async ({ page }) => {
+test("browser protobuf registry preserves Gateway uint64 values", async ({ page }) => {
   const browserCompatibilityWarnings: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "warning" && message.text().includes('Module "fs"')) {
@@ -119,19 +119,34 @@ test("browser protobuf registry loads and encodes Gateway messages", async ({ pa
   });
 
   await page.goto("/login");
-  const encodedLength = await page.evaluate(async () => {
+  const result = await page.evaluate(async () => {
     const registry = await import("/src/services/browserProtoRegistry.ts");
-    const body = await registry.encodeProto("nebula.proto.ResumeSessionRequest", {
-      requestId: "protobuf-browser-test",
-      token: "test-token",
-      deviceId: "test-device",
-      platform: "web",
-      deviceName: "Browser test"
+    const messageId = "74052477837643776";
+    const conversationId = "6676546216131619384";
+    const body = await registry.encodeProto("nebula.proto.MessageData", {
+      messageId,
+      conversationId,
+      fromUserId: "10001",
+      toUserId: "10002",
+      contentType: "MESSAGE_CONTENT_TYPE_TEXT",
+      content: "protobuf-browser-test",
+      timestamp: "1784881086398",
+      serverTimestamp: "1784881086398"
     });
-    return body.length;
+    const decoded = await registry.decodeProto<{
+      messageId: string;
+      conversationId: string;
+    }>("nebula.proto.MessageData", body);
+    return {
+      encodedLength: body.length,
+      messageId: decoded.messageId,
+      conversationId: decoded.conversationId
+    };
   });
 
-  expect(encodedLength).toBeGreaterThan(0);
+  expect(result.encodedLength).toBeGreaterThan(0);
+  expect(result.messageId).toBe("74052477837643776");
+  expect(result.conversationId).toBe("6676546216131619384");
   expect(browserCompatibilityWarnings).toEqual([]);
 });
 

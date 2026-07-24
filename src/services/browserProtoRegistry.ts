@@ -1,4 +1,12 @@
+import Long from "long";
 import protobuf from "protobufjs";
+
+// protobufjs cannot preserve uint64 values in browser ESM builds unless long.js
+// is configured explicitly. NebulaIM Snowflake IDs are larger than 2^53.
+if (protobuf.util.Long !== Long) {
+  protobuf.util.Long = Long;
+  protobuf.configure();
+}
 
 const protoBasePath = import.meta.env.BASE_URL.endsWith("/") ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
 
